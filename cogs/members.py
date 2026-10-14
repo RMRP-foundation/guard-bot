@@ -1,0 +1,279 @@
+import datetime
+import logging
+import math
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from bot import Bot
+from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex
+from core.exceptions import ServiceError
+from database import divisions
+from database.models import User
+from services.authorization import AuthorizationService
+from utils.helpers import safe_respond
+from utils.permissions import is_officer
+from utils.user_data import format_rank, format_static
+
+logger = logging.getLogger(__name__)
+
+
+class MembersBrowser(discord.ui.LayoutView):
+    def __init__(self, guild: discord.Guild, members: list[tuple[int, User]], division_info, members_per_page: int = 25):
+        super().__init__(timeout=600)
+        self.guild = guild
+        self.members = members
+        self.division_info = division_info
+        self.per_page = members_per_page
+        self.current_page = 0
+        self.show_overdue_only = False
+        self.show_warning_only = False
+        self.total_pages = 1
+        self.render_page()
+
+    def _format_member(self, i: int, u: User) -> str:
+        abbr = getattr(self.division_info, "abbreviation", None)
+
+        overdue = (
+            abbr is not None
+            and abbr.lower() == "ва"
+            and u.invited_at is not None
+            and (discord.utils.utcnow() - u.invited_at).days >= ACADEMY_DAYS_LIMIT
+        )
+        no_date = (
+            abbr is not None
+            and abbr.lower() == "ва"
+            and u.invited_at is None
+        )
+        return (
+            f"{i}. {RANK_EMOJIS[u.rank or 0]} "
+            f"`{format_static(u.static)}` "
+            f"<@{u.discord_id}>{' ⚠️' if not self.guild.get_member(u.discord_id) else ''}{' ⏰' if overdue else ''}{' ❓' if no_date else ''} "
+            f"❯ {u.full_name or 'Без имени'} "
+            f"❯ {u.position or 'Без должности'}"
+        )
+
+    @property
+    def _active_members(self):
+        members = self.members
+        if self.show_overdue_only:
+            abbr = getattr(self.division_info, "abbreviation", None)
+            if abbr and abbr.lower() == "ва":
+                members = [
+                    (i, u) for i, u in members
+                    if u.invited_at is None
+                    or (discord.utils.utcnow() - u.invited_at).days > ACADEMY_DAYS_LIMIT
+                ]
+        if self.show_warning_only:
+            members = [
+                (i, u) for i, u in members
+                if not self.guild.get_member(u.discord_id)
+            ]
+        return members
+
+    def render_page(self):
+        self.clear_items()
+        self.total_pages = math.ceil(len(self._active_members) / self.per_page) or 1
+
+        start = self.current_page * self.per_page
+        end = start + self.per_page
+        current_slice = self._active_members[start:end]
+
+        header_text = (
+            f"## {self.division_info.emoji or ''} {self.division_info.name}: "
+            f"{min(len(self._active_members), end)}/{len(self._active_members)} участников"
+        )
+
+        members_text = "\n".join([self._format_member(i, u) for i, u in current_slice])
+        if not members_text:
+            members_text = "Нет участников."
+
+        container = discord.ui.Container()
+        container.add_item(discord.ui.TextDisplay(header_text))
+        container.add_item(
+            discord.ui.TextDisplay("-# ⚠️ — не на сервере | ⏰ — просрочка в ВА (10+ дней) | ❓ — нет даты вступления"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(members_text))
+        container.add_item(discord.ui.TextDisplay(f"Страница: `{self.current_page + 1}` из `{self.total_pages}`"))
+        container.add_item(discord.ui.Separator())
+
+        action_row = discord.ui.ActionRow()
+
+        btn_prev = discord.ui.Button(
+            emoji="⬅️",
+            style=discord.ButtonStyle.gray,
+            disabled=(self.current_page == 0),
+        )
+        btn_prev.callback = self.on_prev
+        action_row.add_item(btn_prev)
+
+        btn_next = discord.ui.Button(
+            emoji="➡️",
+            style=discord.ButtonStyle.gray,
+            disabled=(self.current_page >= self.total_pages - 1),
+        )
+        btn_next.callback = self.on_next
+        action_row.add_item(btn_next)
+
+        abbr = getattr(self.division_info, "abbreviation", None)
+        if abbr and abbr.lower() == "ва":
+            btn_overdue = discord.ui.Button(
+                emoji="⏰",
+                style=discord.ButtonStyle.danger if self.show_overdue_only else discord.ButtonStyle.gray,
+            )
+            btn_overdue.callback = self.on_toggle_overdue
+            action_row.add_item(btn_overdue)
+
+        btn_warning = discord.ui.Button(
+            emoji="⚠️",
+            style=discord.ButtonStyle.danger if self.show_warning_only else discord.ButtonStyle.gray,
+        )
+        btn_warning.callback = self.on_toggle_warning
+        action_row.add_item(btn_warning)
+        container.add_item(action_row)
+
+        self.add_item(container)
+
+    async def on_prev(self, interaction: discord.Interaction):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.render_page()
+            await interaction.response.edit_message(view=self)
+
+    async def on_next(self, interaction: discord.Interaction):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.render_page()
+            await interaction.response.edit_message(view=self)
+
+    async def on_toggle_overdue(self, interaction: discord.Interaction):
+        self.show_overdue_only = not self.show_overdue_only
+        self.current_page = 0
+        self.render_page()
+        await interaction.response.edit_message(view=self)
+
+    async def on_toggle_warning(self, interaction: discord.Interaction):
+        self.show_warning_only = not self.show_warning_only
+        self.current_page = 0
+        self.render_page()
+        await interaction.response.edit_message(view=self)
+
+
+class Members(commands.Cog):
+    def __init__(self, bot: Bot):
+        self.bot = bot
+
+    async def _check_permissions(self, interaction: discord.Interaction) -> User | None:
+        try:
+            editor_db = await AuthorizationService.require_active_soldier(interaction)
+        except ServiceError as error:
+            await safe_respond(interaction, error.message)
+            return None
+
+        if not is_officer(editor_db):
+            await safe_respond(
+                interaction,
+                f"❌ Доступ к просмотру участников подразделений доступен со звания {format_rank(RankIndex.CAPTAIN)}.",
+            )
+            return None
+
+        return editor_db
+
+    @app_commands.command(
+        name="members", description="Просмотр участников подразделения"
+    )
+    @app_commands.describe(division="Подразделение для просмотра")
+    @app_commands.rename(division="подразделение")
+    @app_commands.choices(
+        division=[
+            app_commands.Choice(name=div.name, value=str(div.division_id))
+            for div in divisions.divisions
+        ] + [app_commands.Choice(name="Без подразделения", value="none")]
+    )
+    async def members_handler(
+        self,
+        interaction: discord.Interaction,
+        division: app_commands.Choice[str] | None,
+    ):
+        if not interaction.guild:
+            await safe_respond(interaction, "Эту команду можно использовать только на сервере.")
+            return
+
+        editor_db = await self._check_permissions(interaction)
+        if not editor_db:
+            return
+
+        if division and division.value == "none":
+            members = await User.find(User.division == None, User.rank != None).to_list()  # noqa: E711
+            members.sort(key=lambda u: u.rank or 0, reverse=True)
+            members_indexed = list(enumerate(members, start=1))
+
+            class _NoDivisionInfo:
+                name = "Без подразделения"
+                emoji = "🚫"
+                abbreviation = None
+
+                def get_position_by_name(self, _) -> None:
+                    return None
+
+            if not members:
+                empty_container = discord.ui.Container()
+                empty_container.add_item(
+                    discord.ui.TextDisplay("## 🚫 Без подразделения: 0 участников\n\nПусто.")
+                )
+                view = discord.ui.LayoutView()
+                view.add_item(empty_container)
+                await safe_respond(interaction, view=view)
+                return
+
+            browser_view = MembersBrowser(interaction.guild, members_indexed, _NoDivisionInfo())
+            await safe_respond(interaction, view=browser_view)
+            return
+
+        division_id = int(division.value) if division else None
+
+        if division is None:
+            if editor_db.division is not None:
+                division_id = editor_db.division
+            else:
+                await safe_respond(
+                    interaction,
+                    "❌ Вы не находитесь в подразделении. Пожалуйста, выберите нужное подразделение для просмотра.",
+                )
+                return
+
+        division_info = divisions.get_division(division_id)
+        if not division_info:
+            await safe_respond(interaction, "❌ Подразделение не найдено.")
+            return
+
+        members = await User.find(User.division == division_id).to_list()
+
+        def member_sort_key(u: User) -> int:
+            value = u.rank or 0
+            if u.position:
+                position = division_info.get_position_by_name(u.position)
+                if position and position.privilege.value > 1:
+                    value += position.privilege.value * 10
+            return value
+
+        members.sort(key=member_sort_key, reverse=True)
+        members_indexed = list(enumerate(members, start=1))
+
+        if not members:
+            empty_container = discord.ui.Container()
+            empty_container.add_item(
+                discord.ui.TextDisplay(f"## {division_info.emoji or ''} {division_info.name}: 0 участников\n\nПусто.")
+            )
+            view = discord.ui.LayoutView()
+            view.add_item(empty_container)
+            await interaction.response.send_message(view=view, ephemeral=True)
+            return
+
+        browser_view = MembersBrowser(interaction.guild, members_indexed, division_info)
+        await interaction.response.send_message(view=browser_view, ephemeral=True)
+
+
+async def setup(bot: Bot):
+    await bot.add_cog(Members(bot))

@@ -18,10 +18,6 @@ async def check_and_apply_penalty(
         audit_msg_url: str
 ) -> bool:
 
-    # КМБ не выдаем ЧС за неустойку
-    if target_user_db.division == DivisionId.KMB:
-        return False
-
     days_in_organization = (
         (discord.utils.utcnow() - target_user_db.invited_at).days
         if target_user_db.invited_at

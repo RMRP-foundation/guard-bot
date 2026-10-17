@@ -5,28 +5,26 @@ class RankIndex:
     """Индексы званий для проверок прав доступа"""
 
     PRIVATE = 0  # Рядовой
-    CORPORAL = 1  # Ефрейтор
-    JUNIOR_SERGEANT = 2  # Младший сержант
-    SERGEANT = 3  # Сержант
-    SENIOR_SERGEANT = 4  # Старший сержант
-    SERGEANT_MAJOR = 5  # Старшина
-    WARRANT_OFFICER = 6  # Прапорщик
-    SENIOR_WARRANT = 7  # Старший прапорщик
-    JUNIOR_LIEUTENANT = 8  # Младший лейтенант
-    LIEUTENANT = 9  # Лейтенант
-    SENIOR_LIEUTENANT = 10  # Старший лейтенант
-    CAPTAIN = 11  # Капитан
-    MAJOR = 12  # Майор
-    LIEUTENANT_COLONEL = 13  # Подполковник
-    COLONEL = 14  # Полковник
-    MAJOR_GENERAL = 15  # Генерал-майор
-    LIEUTENANT_GENERAL = 16  # Генерал-лейтенант
-    COLONEL_GENERAL = 17  # Генерал-полковник
-    ARMY_GENERAL = 18  # Генерал армии
+    JUNIOR_SERGEANT = 1  # Младший сержант
+    SERGEANT = 2  # Сержант
+    SENIOR_SERGEANT = 3  # Старший сержант
+    SERGEANT_MAJOR = 4  # Старшина
+    WARRANT_OFFICER = 5  # Прапорщик
+    SENIOR_WARRANT = 6  # Старший прапорщик
+    JUNIOR_LIEUTENANT = 7  # Младший лейтенант
+    LIEUTENANT = 8  # Лейтенант
+    SENIOR_LIEUTENANT = 9  # Старший лейтенант
+    CAPTAIN = 10  # Капитан
+    MAJOR = 11  # Майор
+    LIEUTENANT_COLONEL = 12  # Подполковник
+    COLONEL = 13  # Полковник
+    MAJOR_GENERAL = 14  # Генерал-майор
+    LIEUTENANT_GENERAL = 15  # Генерал-лейтенант
+    COLONEL_GENERAL = 16  # Генерал-полковник
+    POLICE_GENERAL = 17  # Генерал полиции
 
 RANKS_SHORT = [
     "Р-й",
-    "Еф-р",
     "Мл. С-т",
     "С-т",
     "Ст. С-т",
@@ -40,15 +38,14 @@ RANKS_SHORT = [
     "М-р",
     "П/п-к",
     "П-к",
-    "Ген.-м",
-    "Ген.-л",
-    "Ген.-п",
-    "Ген. а.",
+    "Ген.-м.",
+    "Ген.-л.",
+    "Ген.-п.",
+    "Ген. пол.",
 ]
 
 RANKS = [
     "Рядовой",
-    "Ефрейтор",
     "Младший сержант",
     "Сержант",
     "Старший сержант",
@@ -65,10 +62,10 @@ RANKS = [
     "Генерал-майор",
     "Генерал-лейтенант",
     "Генерал-полковник",
-    "Генерал армии",
+    "Генерал полиции",
 ]
 
-AVAILABLE_FOR_REINSTATEMENT = RANKS[4:12]  # "Старший сержант" -> "Капитан"
+AVAILABLE_FOR_REINSTATEMENT = RANKS[0:11]  # "Рядовой" -> "Капитан"
 
 SUPPLY_ITEMS = {
     "Оружие": [

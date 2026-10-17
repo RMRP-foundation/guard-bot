@@ -5,6 +5,7 @@ from typing import Callable
 import discord
 
 from core.config import RANKS, RoleId, DivisionId
+from core.constants import RankIndex
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -22,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 BASIC_ATTESTATION_ROLES = (
     RoleId.ATTESTATION.value,
-    RoleId.REINFORCEMENT.value,
 )
 
 
@@ -67,20 +67,20 @@ class ReinstatementService:
             raise ServiceError("### У вас уже есть открытое заявление на рассмотрении.\nОжидайте его рассмотрения.")
 
     @staticmethod
-    async def create_request(user_id: int, full_name: str, all_documents: str, army_pass: str) -> ReinstatementRequest:
+    async def create_request(user_id: int, full_name: str, all_documents: str, certificate: str) -> ReinstatementRequest:
         """Создаёт и сохраняет заявление на восстановление в базе данных."""
         new_id = await get_next_id("reinstatement_requests")
         request = ReinstatementRequest(
             id=new_id, user=user_id,
-            data=ReinstatementData(full_name=full_name, all_documents=all_documents, army_pass=army_pass),
+            data=ReinstatementData(full_name=full_name, all_documents=all_documents, certificate=certificate),
         )
         await request.create()
         return request
 
     @staticmethod
     async def publish_request(interaction: discord.Interaction, request: ReinstatementRequest, user_db: User, view: discord.ui.View) -> None:
-        """Публикует заявление в канал УВП."""
-        division = divisions.get_division_by_abbreviation("УВП")
+        """Публикует заявление в канал."""
+        division = divisions.get_division(DivisionId.USB)
 
         await safe_publish_request(
             channel=interaction.channel,
@@ -95,7 +95,7 @@ class ReinstatementService:
 
     @classmethod
     async def submit_reinstatement(
-        cls, interaction: discord.Interaction, user_db: User, all_documents: str, army_pass: str,
+        cls, interaction: discord.Interaction, user_db: User, all_documents: str, certificate: str,
         view_factory: Callable[[int], discord.ui.View],
     ) -> None:
         """Оформляет и публикует заявление на восстановление от лица кандидата.
@@ -106,7 +106,7 @@ class ReinstatementService:
         await cls.validate_no_active_request(interaction.user.id)
         request = await cls.create_request(
             user_id=interaction.user.id, full_name=user_db.full_name or interaction.user.display_name,
-            all_documents=all_documents, army_pass=army_pass,
+            all_documents=all_documents, certificate=certificate,
         )
         await cls.publish_request(interaction=interaction, request=request, user_db=user_db, view=view_factory(request.id))
 
@@ -177,6 +177,13 @@ class ReinstatementService:
 
         cls.validate_reviewer_permissions(officer, req.user)
 
+        target_user_db = await User.get_by_discord_id(req.user)
+        if rank_index >= RankIndex.JUNIOR_LIEUTENANT and not (target_user_db and target_user_db.has_military_id):
+            raise ServiceError(
+                f"❌ Невозможно восстановить на звание **{RANKS[rank_index]}**: "
+                f"у кандидата отсутствует подтверждённый военный билет."
+            )
+
         updated_dict = await atomic_status_transition(
             ReinstatementRequest.get_pymongo_collection(), request_id, "ATTESTATION", "APPROVED",
             extra_fields={"rank": rank_index},
@@ -186,11 +193,10 @@ class ReinstatementService:
 
         request = ReinstatementRequest(**updated_dict)
 
-        target_user_db = await User.get_by_discord_id(request.user)
         if not target_user_db:
             target_user_db = User(discord_id=request.user, pre_inited=True)
         target_user_db.rank = rank_index
-        target_user_db.division = DivisionId.VPB
+        target_user_db.division = DivisionId.VBP
         await target_user_db.save()
 
         member = await interaction.client.getch_member(request.user)

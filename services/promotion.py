@@ -6,7 +6,7 @@ import discord
 from beanie.odm.operators.find.comparison import In
 
 from core import config
-from core.config import RankIndex
+from core.config import RankIndex, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -20,31 +20,6 @@ from utils.mongo_atomic import atomic_status_transition
 from utils.permissions import has_disciplinary_restrictions, is_high_command
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class DivisionRule:
-    review_rank: int
-    promote_rank: int = RankIndex.MAJOR
-    review_positions: tuple[str, ...] = ()
-    promote_positions: tuple[str, ...] = ()
-    reviewer_division_id: int | None = None
-
-    def can_review(self, user: User) -> bool:
-        if (user.rank or 0) >= self.review_rank:
-            return True
-        if user.position and self.review_positions:
-            return user.position.strip().lower() in {p.lower() for p in self.review_positions}
-        return False
-
-    def can_promote(self, user: User) -> bool:
-        if (user.rank or 0) >= self.promote_rank:
-            return True
-        if user.position and self.promote_positions:
-            return user.position.strip().lower() in {p.lower() for p in self.promote_positions}
-        return False
-
-
 
 
 @dataclass(frozen=True)
@@ -262,7 +237,7 @@ class PromotionService:
 
         member = await interaction.client.getch_member(req.user_id)
         if member and has_disciplinary_restrictions(member):
-            raise ServiceError("❌ Невозможно повысить военнослужащего с активными дисциплинарными взысканиями или под расследованием.")
+            raise ServiceError("❌ Невозможно повысить военнослужащего с активными дисциплинарными взысканиями.")
 
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db or target_user_db.rank is None:
@@ -271,6 +246,18 @@ class PromotionService:
                 extra_fields={"reviewer_id": interaction.user.id, "reject_reason": "Военнослужащий уволен."},
             )
             raise ServiceError("❌ Военнослужащий больше не состоит на службе.")
+
+        if target_user_db.rank != req.current_rank:
+            raise ServiceError(
+                f"❌ Рапорт неактуален: звание бойца изменилось на **{config.RANKS[target_user_db.rank]}** "
+                f"(рапорт подавался со звания **{config.RANKS[req.current_rank]}**)."
+            )
+
+        if req.target_rank >= RankIndex.JUNIOR_LIEUTENANT and not target_user_db.has_military_id:
+            raise ServiceError(
+                f"❌ Невозможно повысить до звания **{config.RANKS[req.target_rank]}** "
+                f"без подтверждённого военного билета."
+            )
 
         updated_dict = await atomic_status_transition(
             PromotionRequest.get_pymongo_collection(), request_id, "APPROVED", "PROMOTED",
@@ -282,9 +269,8 @@ class PromotionService:
         request = PromotionRequest(**updated_dict)
 
         new_division = target_user_db.division
-        if div.abbreviation.lower() == "ва" and request.target_rank == RankIndex.JUNIOR_SERGEANT:
-            if vbp := divisions.get_division_by_abbreviation("ВБП"):
-                new_division = vbp.division_id
+        if div.division_id == DivisionId.AVNG and request.target_rank == RankIndex.SERGEANT:
+            new_division = DivisionId.VBP
 
         await target_user_db.set({User.rank: request.target_rank, User.division: new_division})
 

@@ -2,6 +2,8 @@ import discord
 
 from core.exceptions import ServiceError, ModalInputRequired
 from database.models import User
+from utils.permissions import is_service_account
+
 
 class AuthorizationService:
 
@@ -15,7 +17,10 @@ class AuthorizationService:
         Raises:
             ServiceError: Если пользователь не прошел проверку.
         """
-        user = await User.get_active_soldier(interaction.user.id)
+        if is_service_account(interaction.user.id):
+            user = await User.get_by_discord_id(interaction.user.id)
+        else:
+            user = await User.get_active_soldier(interaction.user.id)
 
         if user is None:
             raise ServiceError("❌ Вы не состоите на службе.")

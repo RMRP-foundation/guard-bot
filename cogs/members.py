@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import Bot
-from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex
+from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
@@ -33,17 +33,17 @@ class MembersBrowser(discord.ui.LayoutView):
         self.render_page()
 
     def _format_member(self, i: int, u: User) -> str:
-        abbr = getattr(self.division_info, "abbreviation", None)
+        div_id = getattr(self.division_info, "division_id", None)
 
         overdue = (
-            abbr is not None
-            and abbr.lower() == "ва"
+            div_id is not None
+            and div_id == DivisionId.AVNG
             and u.invited_at is not None
             and (discord.utils.utcnow() - u.invited_at).days >= ACADEMY_DAYS_LIMIT
         )
         no_date = (
-            abbr is not None
-            and abbr.lower() == "ва"
+            div_id is not None
+            and div_id == DivisionId.AVNG
             and u.invited_at is None
         )
         return (
@@ -58,8 +58,8 @@ class MembersBrowser(discord.ui.LayoutView):
     def _active_members(self):
         members = self.members
         if self.show_overdue_only:
-            abbr = getattr(self.division_info, "abbreviation", None)
-            if abbr and abbr.lower() == "ва":
+            div_id = getattr(self.division_info, "division_id", None)
+            if div_id and div_id == DivisionId.AVNG:
                 members = [
                     (i, u) for i, u in members
                     if u.invited_at is None
@@ -92,7 +92,7 @@ class MembersBrowser(discord.ui.LayoutView):
         container = discord.ui.Container()
         container.add_item(discord.ui.TextDisplay(header_text))
         container.add_item(
-            discord.ui.TextDisplay("-# ⚠️ — не на сервере | ⏰ — просрочка в ВА (10+ дней) | ❓ — нет даты вступления"))
+            discord.ui.TextDisplay("-# ⚠️ — не на сервере | ⏰ — просрочка в АВНГ (10+ дней) | ❓ — нет даты вступления"))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(members_text))
         container.add_item(discord.ui.TextDisplay(f"Страница: `{self.current_page + 1}` из `{self.total_pages}`"))
@@ -116,8 +116,8 @@ class MembersBrowser(discord.ui.LayoutView):
         btn_next.callback = self.on_next
         action_row.add_item(btn_next)
 
-        abbr = getattr(self.division_info, "abbreviation", None)
-        if abbr and abbr.lower() == "ва":
+        div_id = getattr(self.division_info, "division_id", None)
+        if div_id and div_id == DivisionId.AVNG:
             btn_overdue = discord.ui.Button(
                 emoji="⏰",
                 style=discord.ButtonStyle.danger if self.show_overdue_only else discord.ButtonStyle.gray,

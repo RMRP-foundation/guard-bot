@@ -3,16 +3,11 @@ import re
 import discord
 
 from core.exceptions import ServiceError
-from database.models import RoleType, User
+from database.models import User
 from services.authorization import AuthorizationService
 from services.role_getting import RoleService
 import texts
-from ui.modals.role_getting import (
-    GovEmployeeModal,
-    KMBRequestModal,
-    RoleRequestModal,
-    SupplyAccessModal,
-)
+from ui.modals.role_getting import RoleRequestModal
 from utils.helpers import safe_respond, safe_edit_message, build_mentions, random_loading_message
 from utils.user_data import format_static
 
@@ -25,23 +20,12 @@ async def _get_applicant_defaults(user_id: int) -> tuple[str, str]:
     return default_name, default_static
 
 
-async def _handle_role_apply(interaction: discord.Interaction, role_type: RoleType) -> None:
+async def _handle_role_apply(interaction: discord.Interaction) -> None:
     """Проверяет ограничения и открывает соответствующую модалку."""
     try:
-        check_bl = role_type in (RoleType.ARMY, RoleType.KMB)
-        await RoleService.validate_can_apply(interaction.user.id, interaction.channel, check_blacklist=check_bl)
+        await RoleService.validate_can_apply(interaction.user.id, interaction.channel, check_blacklist=True)
         name, static = await _get_applicant_defaults(interaction.user.id)
-
-        match role_type:
-            case RoleType.ARMY:
-                await interaction.response.send_modal(RoleRequestModal(user_name=name, static_id=static))
-            case RoleType.KMB:
-                await interaction.response.send_modal(KMBRequestModal(user_name=name, static_id=static))
-            case RoleType.SUPPLY_ACCESS:
-                await interaction.response.send_modal(SupplyAccessModal(user_name=name, static_id=static))
-            case RoleType.GOV_EMPLOYEE:
-                await interaction.response.send_modal(GovEmployeeModal(user_name=name, static_id=static))
-
+        await interaction.response.send_modal(RoleRequestModal(user_name=name, static_id=static))
     except ServiceError as error:
         await safe_respond(interaction, error.message)
 
@@ -57,30 +41,12 @@ class RoleApplyView(discord.ui.LayoutView):
     container.add_item(discord.ui.Separator(visible=True))
 
     army_button = discord.ui.Button(
-        label="ВС РФ", emoji="🎖️", style=discord.ButtonStyle.primary, custom_id="role_apply_army"
+        label="ФСВНГ", emoji="🎖️", style=discord.ButtonStyle.primary, custom_id="role_apply_army"
     )
-    army_button.callback = lambda inter: _handle_role_apply(inter, RoleType.ARMY)
-
-    kmb_button = discord.ui.Button(
-        label="КМБ", emoji="🔰", style=discord.ButtonStyle.secondary, custom_id="role_apply_kmb"
-    )
-    kmb_button.callback = lambda inter: _handle_role_apply(inter, RoleType.KMB)
-
-    supply_button = discord.ui.Button(
-        label="Доступ к поставке", emoji="📦", style=discord.ButtonStyle.secondary, custom_id="role_apply_supply"
-    )
-    supply_button.callback = lambda inter: _handle_role_apply(inter, RoleType.SUPPLY_ACCESS)
-
-    gov_button = discord.ui.Button(
-        label="Гос. сотрудник", emoji="🏛️", style=discord.ButtonStyle.secondary, custom_id="role_apply_gov"
-    )
-    gov_button.callback = lambda inter: _handle_role_apply(inter, RoleType.GOV_EMPLOYEE)
+    army_button.callback = _handle_role_apply
 
     action_row = discord.ui.ActionRow()
     action_row.add_item(army_button)
-    action_row.add_item(kmb_button)
-    action_row.add_item(supply_button)
-    action_row.add_item(gov_button)
     container.add_item(action_row)
 
 

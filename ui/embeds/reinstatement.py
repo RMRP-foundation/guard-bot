@@ -16,7 +16,7 @@ def reinstatement_embed(request: ReinstatementRequest, requester: User) -> disco
     e.add_field(name="Заявитель", value=f"{request.data.full_name}")
     e.add_field(name="Статик", value=format_static(requester.static))
     e.add_field(name="Все документы", value=request.data.all_documents, inline=False)
-    e.add_field(name="Военный билет", value=request.data.army_pass, inline=False)
+    e.add_field(name="Удостоверение", value=request.data.certificate, inline=False)
     if request.reject_reason:
         e.add_field(
             name="Причина отклонения", value=request.reject_reason, inline=False

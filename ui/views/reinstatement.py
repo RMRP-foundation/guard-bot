@@ -55,7 +55,7 @@ class ReinstatementRankSelect(
                 placeholder="👍 Одобрить на звание...",
                 custom_id=f"select_reinstatement_rank:{request_id}",
                 options=[
-                    SelectOption(label=rank, value=str(index + 4))
+                    SelectOption(label=rank, value=str(index))
                     for index, rank in enumerate(constants.AVAILABLE_FOR_REINSTATEMENT)
                 ],
             )
@@ -178,66 +178,3 @@ class ReinstatementAttestationView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(ReinstatementRankSelect(request_id=request_id))
         self.add_item(ReinstatementManagementButton("reject", request_id))
-
-
-class LegacyApproveReinstatementButton(
-    discord.ui.DynamicItem[discord.ui.Button],
-    template=r"approve_reinstatement:(?P<id>\d+)",
-):
-    def __init__(self, request_id: int):
-        super().__init__(
-            discord.ui.Button(
-                label="Принять",
-                emoji="👍",
-                style=discord.ButtonStyle.success,
-                custom_id=f"approve_reinstatement:{request_id}",
-            )
-        )
-        self.request_id = request_id
-
-    @classmethod
-    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match):
-        return cls(int(match.group("id")))
-
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            officer = await AuthorizationService.require_active_soldier(interaction)
-            await safe_respond(interaction, random_loading_message())
-            result = await ReinstatementService.start_attestation(
-                interaction=interaction, request_id=self.request_id, officer=officer,
-            )
-            await safe_edit_message(
-                message=interaction.message, content=build_mentions(result.mention_ids),
-                embed=result.embed, view=result.view,
-            )
-            await safe_respond(interaction, "✅ Кандидат переведён на этап переаттестации.")
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)
-
-
-class LegacyRejectReinstatementButton(
-    discord.ui.DynamicItem[discord.ui.Button],
-    template=r"reject_reinstatement:(?P<id>\d+)",
-):
-    def __init__(self, request_id: int):
-        super().__init__(
-            discord.ui.Button(
-                label="Отклонить",
-                emoji="👎",
-                style=discord.ButtonStyle.danger,
-                custom_id=f"reject_reinstatement:{request_id}",
-            )
-        )
-        self.request_id = request_id
-
-    @classmethod
-    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match):
-        return cls(int(match.group("id")))
-
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            officer = await AuthorizationService.require_active_soldier(interaction)
-            btn = ReinstatementManagementButton("reject", self.request_id)
-            await btn._handle_reject_modal(interaction, officer)
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)

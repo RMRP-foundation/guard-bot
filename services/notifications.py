@@ -275,3 +275,22 @@ async def notify_promotion_rejected(bot, user_id: int, reason: str) -> bool:
         color=discord.Color.red(),
     )
     return await _send_dm(bot, user_id, embed)
+
+async def notify_military_id_approved(bot, user_id: int) -> bool:
+    """Уведомление об успешном подтверждении военного билета."""
+    embed = discord.Embed(
+        title=" Военный билет подтверждён",
+        description="Наличие вашего военного билета было успешно проверено и подтверждено командованием.",
+        color=discord.Color.green(),
+    )
+    return await _send_dm(bot, user_id, embed)
+
+
+async def notify_military_id_rejected(bot, user_id: int, reason: str) -> bool:
+    """Уведомление об отклонении военного билета."""
+    embed = discord.Embed(
+        title="❌ Военный билет не подтверждён",
+        description=f"Ваше заявление на подтверждение военного билета было отклонено.\n\n**Причина:** {reason}",
+        color=discord.Color.red(),
+    )
+    return await _send_dm(bot, user_id, embed)

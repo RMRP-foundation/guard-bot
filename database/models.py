@@ -70,6 +70,7 @@ class User(Document):
     invited_at: datetime.datetime | None = None
     blacklist: Blacklist | None = None
     last_supply_at: datetime.datetime | None = None
+    has_military_id: bool = False
     pre_inited: bool = False
 
     @property
@@ -88,6 +89,7 @@ class User(Document):
     def discord_nick(self) -> str:
         from database import divisions
         from utils.user_data import transliterate_abbreviation
+        from core.config import DivisionId
 
         parts = []
         if self.leave_status:
@@ -96,7 +98,7 @@ class User(Document):
         if self.division is not None:
             div = divisions.get_division(self.division)
             if div:
-                if div.abbreviation in ["ВА", "КМБ"]:
+                if div.division_id == DivisionId.AVNG:
                     parts.append(div.abbreviation)
                 else:
                     parts.append(transliterate_abbreviation(div.abbreviation))
@@ -144,7 +146,7 @@ class User(Document):
 class ReinstatementData(BaseModel):
     full_name: str
     all_documents: str
-    army_pass: str
+    certificate: str
 
 
 class ReinstatementRequest(Document):
@@ -162,9 +164,6 @@ class ReinstatementRequest(Document):
 
 class RoleType(str, Enum):
     ARMY = "army"  # ВС РФ
-    KMB = "kmb" # КМБ
-    SUPPLY_ACCESS = "supply_access"  # Доступ к поставке
-    GOV_EMPLOYEE = "gov_employee"  # Гос. сотрудник
 
 
 class RoleData(BaseModel):
@@ -226,7 +225,6 @@ class SupplyRequest(Document):
 
 class DismissalType(str, Enum):
     PJS = "ПСЖ"
-    TRANSFER = "Перевод"
     AUTO = "Потеря спец. связи"
 
 
@@ -274,7 +272,7 @@ class TransferRequest(Document):
     class Settings:
         name = "transfer_requests"
 
-class SSOPatrolRequest(Document):
+class PatrolRequest(Document):
     id: int
     user_id: int
     full_name: str
@@ -284,7 +282,7 @@ class SSOPatrolRequest(Document):
     reviewer_id: int | None = None
 
     class Settings:
-        name = "sso_patrol_requests"
+        name = "patrol_requests"
 
 
 class MaterialsReport(Document):
@@ -299,27 +297,6 @@ class MaterialsReport(Document):
         name = "materials_reports"
 
 
-class LogisticsType(str, Enum):
-    ORBITA = "РЛС \"Орбита\""
-    OBJECT7 = "Объект 7"
-    WAREHOUSE = "Военные склады"
-
-
-class LogisticsRequest(Document):
-    id: int
-    user_id: int
-    nickname: str
-    faction: str
-    supply_type: LogisticsType
-    status: str = "PENDING"  # PENDING, APPROVED, REJECTED, EXPIRED
-    reviewer_name: str | None = None
-    message_id: int | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-
-    class Settings:
-        name = "logistics_requests"
-
-
 class LeaveType(str, Enum):
     IC = "IC"
     OOC = "OOC"
@@ -332,7 +309,7 @@ class LeaveRequest(Document):
     reason: str
     starts_at: datetime.datetime
     ends_at: datetime.datetime
-    original_nick: str | None = None  # Ник до отпуска для ССО
+    original_nick: str | None = None
 
     status: str = "PENDING"
     reviewer_id: int | None = None
@@ -366,6 +343,21 @@ class PromotionRequest(Document):
     class Settings:
         name = "promotion_reports"
         indexes = [IndexModel([("user_id", 1), ("status", 1)])]
+
+
+class MilitaryIdRequest(Document):
+    id: int
+    user_id: int
+    full_name: str
+    evidence: str
+    status: str = "PENDING"  # PENDING, APPROVED, REJECTED
+    reviewer_id: int | None = None
+    reject_reason: str | None = None
+    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
+    reviewed_at: datetime.datetime | None = None
+
+    class Settings:
+        name = "military_id_requests"
 
 
 class BottomMessage(Document):

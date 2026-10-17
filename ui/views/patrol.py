@@ -4,13 +4,13 @@ import discord
 
 from core.exceptions import ServiceError
 from services.authorization import AuthorizationService
-from services.sso_patrol import SSOPatrolService
+from services.patrol import PatrolService
 from texts import patrol_rules, patrol_title
-from ui.modals.sso_patrol import SSOPatrolModal
+from ui.modals.patrol import PatrolModal
 from utils.helpers import safe_respond, safe_edit_message, build_mentions, random_loading_message
 
 
-class SSOPatrolApplyView(discord.ui.LayoutView):
+class PatrolApplyView(discord.ui.LayoutView):
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -22,7 +22,7 @@ class SSOPatrolApplyView(discord.ui.LayoutView):
         btn = discord.ui.Button(
             label="Подать заявление",
             style=discord.ButtonStyle.primary,
-            custom_id="sso_apply_btn",
+            custom_id="patrol_apply_btn",
             emoji="📨",
         )
         btn.callback = self.on_apply
@@ -35,15 +35,15 @@ class SSOPatrolApplyView(discord.ui.LayoutView):
     async def on_apply(self, interaction: discord.Interaction):
         try:
             user_db = await AuthorizationService.require_active_soldier(interaction)
-            await SSOPatrolService.validate_can_apply(user_db)
-            await interaction.response.send_modal(SSOPatrolModal(user_db))
+            await PatrolService.validate_can_apply(user_db)
+            await interaction.response.send_modal(PatrolModal(user_db))
         except ServiceError as error:
             await safe_respond(interaction, error.message)
 
 
-class SSOPatrolManagementButton(
+class PatrolManagementButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template=r"sso_mng:(?P<action>\w+):(?P<id>\d+)",
+    template=r"patrol_mng:(?P<action>\w+):(?P<id>\d+)",
 ):
     def __init__(self, action: str, request_id: int):
         labels = {"approve": "Одобрить", "reject": "Отклонить"}
@@ -55,7 +55,7 @@ class SSOPatrolManagementButton(
                 label=labels.get(action, action),
                 emoji=emojis.get(action),
                 style=styles.get(action, discord.ButtonStyle.secondary),
-                custom_id=f"sso_mng:{action}:{request_id}",
+                custom_id=f"patrol_mng:{action}:{request_id}",
             )
         )
         self.action = action
@@ -70,7 +70,7 @@ class SSOPatrolManagementButton(
             officer = await AuthorizationService.require_active_soldier(interaction)
             await safe_respond(interaction, random_loading_message(), ephemeral=True)
 
-            result = await SSOPatrolService.process_sso_patrol(
+            result = await PatrolService.process_patrol(
                 interaction=interaction, request_id=self.request_id, action=self.action, officer=officer,
             )
             await safe_edit_message(
@@ -85,10 +85,10 @@ class SSOPatrolManagementButton(
             await safe_respond(interaction, error.message)
 
 
-class SSOPatrolManagementView(discord.ui.View):
-    """Вьюха для управления заявкой на патруль ССО (Одобрить / Отклонить)."""
+class PatrolManagementView(discord.ui.View):
+    """Вьюха для управления заявкой на патруль (Одобрить / Отклонить)."""
 
     def __init__(self, request_id: int):
         super().__init__(timeout=None)
-        self.add_item(SSOPatrolManagementButton("approve", request_id))
-        self.add_item(SSOPatrolManagementButton("reject", request_id))
+        self.add_item(PatrolManagementButton("approve", request_id))
+        self.add_item(PatrolManagementButton("reject", request_id))

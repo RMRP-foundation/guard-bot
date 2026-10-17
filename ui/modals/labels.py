@@ -47,7 +47,7 @@ def screenshot_label(element: str):
         ),
     )
 
-def build_sso_quiz(data, index) -> tuple[discord.ui.Label, discord.ui.Select]:
+def build_patrol_quiz(data, index) -> tuple[discord.ui.Label, discord.ui.Select]:
     options = data['o'][:]
     random.shuffle(options)
 
@@ -64,7 +64,7 @@ def static_reminder():
 
 def patrol_reminder():
     return discord.ui.TextDisplay(
-        "-# Подавая запрос, вы подтверждаете знание правил ношения формы, обязуетесь быть в спецсвязи ССО, "
+        "-# Подавая запрос, вы подтверждаете знание правил ношения формы, обязуетесь быть в спецсвязи СОБР, "
         "выполнять задачи возложенные на подразделение, взаимодействовать с бойцами подразделения "
         "и выполнять приказы его командиров."
     )

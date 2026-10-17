@@ -5,6 +5,7 @@ from discord.ext import commands
 from bot import Bot
 from core import config
 from core.config import RANK_EMOJIS, RankIndex
+from core.constants import RANKS
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
@@ -16,8 +17,7 @@ from services.notifications import notify_blacklisted, notify_demoted, notify_di
 from utils.dismissal_logic import check_and_apply_penalty, cleanup_user_leaves
 from utils.helpers import random_loading_message, safe_respond
 from utils.permissions import can_assign_position, has_disciplinary_restrictions, is_higher_rank, is_officer, is_service_account
-from utils.user_data import format_rank, format_static, parse_name, parse_static, clean_name, clean_static, \
-    set_name_if_changed
+from utils.user_data import format_rank, format_static, clean_name, clean_static, set_name_if_changed
 
 
 class UserEdit(commands.Cog):
@@ -134,7 +134,7 @@ class UserEdit(commands.Cog):
             return
 
         if has_disciplinary_restrictions(user):
-            await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями или под расследованием.")
+            await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями.")
             return
 
         if user_info.rank >= len(config.RANKS) - 1:
@@ -144,6 +144,14 @@ class UserEdit(commands.Cog):
         target_rank = user_info.rank + 1
         if not is_service_account(editor.discord_id) and (editor.rank or 0) <= target_rank:
             await safe_respond(interaction, "❌ Вы не можете присвоить звание выше или равное вашему.")
+            return
+
+        if target_rank >= RankIndex.JUNIOR_LIEUTENANT and not user_info.has_military_id:
+            await safe_respond(
+                interaction,
+                f"❌ Невозможно повысить до звания **{config.RANKS[target_rank]}**: "
+                f"у военнослужащего отсутствует подтверждённый военный билет."
+            )
             return
 
         user_info.rank = target_rank
@@ -214,7 +222,7 @@ class UserEdit(commands.Cog):
             placeholder="Изменить звание",
             options=[
                 discord.SelectOption(default=index == user_info.rank, emoji=RANK_EMOJIS[index], label=name, value=str(index))
-                for index, name in enumerate(config.RANKS)
+                for index, name in enumerate(RANKS)
             ],
         )
 
@@ -229,12 +237,21 @@ class UserEdit(commands.Cog):
             old_rank = user_info.rank if user_info.rank is not None else -1
 
             if new_rank > old_rank and has_disciplinary_restrictions(user):
-                await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями или под расследованием.")
+                await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями.")
                 await interaction.edit_original_response(view=self.build_view(user, user_info))
                 return
 
             if not is_service_account(editor.discord_id) and (editor.rank or 0) <= new_rank:
                 await safe_respond(interaction, "❌ Вы не можете присвоить звание выше или равное вашему.")
+                await interaction.edit_original_response(view=self.build_view(user, user_info))
+                return
+
+            if new_rank >= RankIndex.JUNIOR_LIEUTENANT and not user_info.has_military_id:
+                await safe_respond(
+                    interaction,
+                    f"❌ Невозможно присвоить звание **{config.RANKS[new_rank]}**: "
+                    f"у военнослужащего отсутствует подтверждённый военный билет."
+                )
                 await interaction.edit_original_response(view=self.build_view(user, user_info))
                 return
 

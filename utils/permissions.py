@@ -59,17 +59,11 @@ def has_penalty_roles(member: discord.Member) -> bool:
         return False
     return any(r.id in config.PENALTY_ROLES for r in member.roles)
 
-def is_under_investigation(member: discord.Member) -> bool:
-    """Проверяет роль 'Ведется расследование'."""
-    if not member:
-        return False
-    return any(r.id == config.INVESTIGATION_ROLE for r in member.roles)
-
 def has_disciplinary_restrictions(member: discord.Member, check_investigation: bool = True) -> bool:
-    """Общая проверка: выговоры + (опционально) расследование."""
+    """Общая проверка на выговоры/предупреждения."""
     if has_penalty_roles(member):
         return True
-    return check_investigation and is_under_investigation(member)
+    return check_investigation
 
 def can_assign_position(
     editor_discord_id: int,

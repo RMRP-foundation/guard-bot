@@ -10,7 +10,7 @@ from utils.helpers import safe_respond
 
 class ReinstatementModal(discord.ui.Modal, title="Заявление на восстановление"):
     all_documents = screenshot_label("всех документов")
-    army_pass = screenshot_label("военного билета")
+    certificate = screenshot_label("удостоверения")
     footer = static_reminder()
 
     def __init__(self, user_db: User):
@@ -34,7 +34,7 @@ class ReinstatementModal(discord.ui.Modal, title="Заявление на вос
                 interaction=interaction,
                 user_db=self.user_db,
                 all_documents=self.all_documents.component.value.strip(),
-                army_pass=self.army_pass.component.value.strip(),
+                certificate=self.certificate.component.value.strip(),
                 view_factory=ReinstatementManagementView,
             )
             await safe_respond(interaction, "### Заявление отправлено на рассмотрение.")

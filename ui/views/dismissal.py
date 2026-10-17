@@ -26,8 +26,7 @@ async def _open_dismissal_modal(interaction: discord.Interaction, d_type: Dismis
         await safe_respond(
             interaction,
             "❌ Вы не можете подать рапорт на увольнение, "
-            "пока у вас есть активные дисциплинарные взыскания "
-            "или в отношении вас ведётся расследование.",
+            "пока у вас есть активные дисциплинарные взыскания.",
         )
         return
 
@@ -44,7 +43,7 @@ class DismissalApplyView(discord.ui.LayoutView):
     container.add_item(
         discord.ui.TextDisplay(
             "### Подача рапорта\n"
-            "Выберите тип увольнения, нажав соответствующую кнопку ниже.\n\n"
+            "Нажмите соответствующую кнопку ниже.\n\n"
             "**Примечание:**\n"
             "- Если вы не отработали 5 дней во фракции, вы попадете в ЧС на 14 дней.\n"
             "- Заполняйте данные корректно, как в паспорте."
@@ -57,16 +56,8 @@ class DismissalApplyView(discord.ui.LayoutView):
     )
     psj_button.callback = lambda inter: _open_dismissal_modal(inter, DismissalType.PJS)
 
-    transfer_button = discord.ui.Button(
-        label="Перевод",
-        style=discord.ButtonStyle.primary,
-        custom_id="dismissal_transfer",
-    )
-    transfer_button.callback = lambda inter: _open_dismissal_modal(inter, DismissalType.TRANSFER)
-
     action_row = discord.ui.ActionRow()
     action_row.add_item(psj_button)
-    action_row.add_item(transfer_button)
     container.add_item(action_row)
 
 

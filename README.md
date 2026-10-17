@@ -24,7 +24,7 @@
 **Admin-команды (Префиксные, только для администраторов):**
 *   `!resync` — Синхронизация дерева команд с сервером.
 *   `!reset_division <discord_id>` — Сброс подразделения и должности пользователя.
-*   `!refresh_roles`, `!refresh_dismissal`, `!refresh_promotion`, `!refresh_transfer`, `!refresh_reinstatement`, `!refresh_leave`, `!refresh_timeoff`, `!refresh_supplies`, `!refresh_audit`, `!refresh_logistics`, `!refresh_materials`, `!refresh_sso` — Обновление закрепленных UI-панелей в соответствующих каналах.
+*   `!refresh_roles`, `!refresh_dismissal`, `!refresh_promotion`, `!refresh_transfer`, `!refresh_reinstatement`, `!refresh_leave`, `!refresh_timeoff`, `!refresh_supplies`, `!refresh_audit`, `!refresh_materials`, `!refresh_sso` — Обновление закрепленных UI-панелей в соответствующих каналах.
 
 ## 📚 3. Используемые библиотеки
 *   `discord.py` — Базовый фреймворк для работы с Discord API (вкл. `app_commands`, `tasks`).

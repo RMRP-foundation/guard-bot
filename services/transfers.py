@@ -6,7 +6,7 @@ import discord
 from beanie.odm.operators.find.comparison import NotIn
 
 from core import config
-from core.config import RankIndex
+from core.config import RankIndex, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -72,7 +72,7 @@ class TransferService:
         Raises:
             ServiceError: Если звание ниже требуемого, либо боец уже состоит в этом подразделении.
         """
-        min_rank = RankIndex.JUNIOR_SERGEANT if destination.abbreviation != "ССО" else RankIndex.SENIOR_SERGEANT
+        min_rank = RankIndex.JUNIOR_SERGEANT if destination.division_id != DivisionId.SOBR else RankIndex.SERGEANT
 
         if (user_db.rank or 0) < min_rank:
             raise ServiceError(

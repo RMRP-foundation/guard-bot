@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from core import config
-from core.config import EXCLUDED_ROLES, RoleId
+from core.config import EXCLUDED_ROLES, RoleId, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
@@ -40,8 +40,8 @@ class MemberService:
         """Формирует актуальный никнейм для действующего военнослужащего."""
         div = divisions.get_division(user_db.division) if user_db.division else None
 
-        # Для подразделения ССО используется оригинальный ник (позывной)
-        if div and div.abbreviation == "ССО":
+        # Для подразделения СОБР используется оригинальный ник (позывной)
+        if div and div.division_id == DivisionId.SOBR:
             if user_db.leave_status:
                 base_name = original_nick or member.display_name
                 return f"{user_db.leave_status} | {base_name}"[:32]
@@ -63,7 +63,7 @@ class MemberService:
             member: Объект участника Discord.
             user_db: Объект пользователя из базы данных.
             reason: Причина изменения в Discord Audit Log.
-            original_nick: Исходный никнейм (применяется для ССО и завершения отпусков).
+            original_nick: Исходный никнейм (применяется для СОБР и завершения отпусков).
 
         Returns:
             bool: True, если синхронизация прошла успешно (или изменений не требовалось),

@@ -162,6 +162,17 @@ async def _promotion_apply_callback(interaction: discord.Interaction) -> None:
         if user_db.division != div.division_id:
             raise ServiceError("❌ Вы можете подавать рапорт только в своём подразделении.")
 
+        target_rank = user_db.rank + 1
+        if target_rank >= config.RankIndex.JUNIOR_LIEUTENANT and not user_db.has_military_id:
+            mil_channel_id = config.CHANNELS.get("military_id")
+            channel_hint = f" в канале <#{mil_channel_id}>" if mil_channel_id else ""
+            raise ServiceError(
+                f"### ❌ Отказано в подаче рапорта\n"
+                f"Для повышения до звания **{config.RANKS[target_rank]}** "
+                f"необходим подтверждённый военный билет.\n"
+                f"Пожалуйста, сначала подтвердите военный билет{channel_hint}."
+            )
+
         await interaction.response.send_modal(PromotionRequestModal(div, user_db))
 
     except ServiceError as error:

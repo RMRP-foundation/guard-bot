@@ -2,19 +2,19 @@ import datetime
 
 import discord
 
-from database.models import SSOPatrolRequest, User
+from database.models import PatrolRequest, User
 from database.status import get_status_display
 from utils.user_data import format_static, format_rank
 
 
-def sso_patrol_embed(request: SSOPatrolRequest, user: User, failed_question: str | None = None) -> discord.Embed:
+def patrol_embed(request: PatrolRequest, user: User, failed_question: str | None = None) -> discord.Embed:
     today = discord.utils.utcnow().astimezone(datetime.timezone(datetime.timedelta(hours=3))).strftime('%d.%m.%Y')
 
     if failed_question:
         title = "❌ Провал проверки знаний"
         color = discord.Color.red()
     else:
-        title = f"Запрос формы ССО #{request.id}"
+        title = f"Запрос формы СОБР #{request.id}"
 
         status_display = get_status_display(request.status)
         color = status_display.color

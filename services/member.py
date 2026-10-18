@@ -40,8 +40,8 @@ class MemberService:
         """Формирует актуальный никнейм для действующего военнослужащего."""
         div = divisions.get_division(user_db.division) if user_db.division else None
 
-        # Для подразделения СОБР используется оригинальный ник (позывной)
-        if div and div.division_id == DivisionId.SOBR:
+        # Для подразделения СОБР и ОМОН используется оригинальный ник (позывной)
+        if div and div.division_id in (DivisionId.SOBR, DivisionId.OMON):
             if user_db.leave_status:
                 base_name = original_nick or member.display_name
                 return f"{user_db.leave_status} | {base_name}"[:32]

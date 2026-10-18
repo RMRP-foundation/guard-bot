@@ -16,8 +16,6 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise Exception("TOKEN not found")
 
-
-
 ENVIRONMENT = os.getenv("ENVIRONMENT")
 if not ENVIRONMENT:
     raise Exception("ENVIRONMENT not set")
@@ -223,4 +221,4 @@ PROMOTION_RULES: dict[int, DivisionRule] = {
     ),
 }
 
-SUPPLY_INFO_LINK = ""
+SUPPLY_INFO_LINK = "https://discord.com/channels/1245655611484541009/1348001487900381244/1561417774801231882"

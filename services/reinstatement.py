@@ -16,7 +16,7 @@ from services.notifications import notify_reinstatement_approved, notify_reinsta
     notify_reinstatement_attestation
 from ui.embeds.reinstatement import reinstatement_embed
 from utils.helpers import safe_publish_request, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class ReinstatementService:
 
     @staticmethod
     def validate_reviewer_permissions(officer: User, target_user_id: int) -> None:
-        """Проверяет права на обработку заявки (Полковник+ или УВП, не автор).
+        """Проверяет права на обработку заявки (Полковник+ или УСБ, не автор).
 
         Raises:
             ServiceError: Если офицер — автор заявления, либо не проходит по званию/подразделению.
@@ -50,18 +50,18 @@ class ReinstatementService:
         has_perm = is_high_command(officer)
         if not has_perm and officer.division:
             div = divisions.get_division(officer.division)
-            if div and div.abbreviation == "УВП":
+            if div and div.division_id == DivisionId.USB:
                 has_perm = True
 
         if not has_perm:
-            raise ServiceError("❌ У вас нет прав взаимодействовать с этой заявкой (требуется Полковник+ или УВП).")
+            raise ServiceError("❌ У вас нет прав взаимодействовать с этой заявкой (требуется Полковник+ или УСБ).")
 
     @staticmethod
     async def validate_no_active_request(user_id: int) -> None:
         """Проверяет, что у пользователя нет заявления в статусе PENDING или ATTESTATION."""
         opened_request = await ReinstatementRequest.find_one(
             ReinstatementRequest.user == user_id,
-            {"status": {"$in": ["PENDING", "ATTESTATION"]}},
+            ReinstatementRequest.status.in_(["PENDING", "ATTESTATION"]),
         )
         if opened_request is not None:
             raise ServiceError("### У вас уже есть открытое заявление на рассмотрении.\nОжидайте его рассмотрения.")
@@ -146,7 +146,7 @@ class ReinstatementService:
         cls.validate_reviewer_permissions(officer, req.user)
 
         updated_dict = await atomic_status_transition(
-            ReinstatementRequest.get_pymongo_collection(), request_id, "PENDING", "ATTESTATION",
+            ReinstatementRequest, request_id, "PENDING", "ATTESTATION",
         )
         if not updated_dict:
             raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
@@ -185,7 +185,7 @@ class ReinstatementService:
             )
 
         updated_dict = await atomic_status_transition(
-            ReinstatementRequest.get_pymongo_collection(), request_id, "ATTESTATION", "APPROVED",
+            ReinstatementRequest, request_id, "ATTESTATION", "APPROVED",
             extra_fields={"rank": rank_index},
         )
         if not updated_dict:
@@ -228,7 +228,7 @@ class ReinstatementService:
         cls.validate_reviewer_permissions(officer, req.user)
 
         updated_dict = await atomic_status_transition(
-            ReinstatementRequest.get_pymongo_collection(), request_id, ["PENDING", "ATTESTATION"], "REJECTED",
+            ReinstatementRequest, request_id, ["PENDING", "ATTESTATION"], "REJECTED",
             extra_fields={"reject_reason": reason},
         )
         if not updated_dict:

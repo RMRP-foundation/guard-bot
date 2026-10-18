@@ -1,57 +1,30 @@
 import logging
+import os
 
-from beanie import init_beanie
-from pymongo import AsyncMongoClient
+from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core import config
-from database.counters import Counter
-from database.models import (
-    BottomMessage,
-    DismissalRequest,
-    Division,
-    ReinstatementRequest,
-    RoleRequest,
-    SupplyRequest,
-    TransferRequest,
-    User,
-    TimeoffRequest,
-    PatrolRequest,
-    MaterialsReport,
-    LeaveRequest,
-    PromotionRequest,
-    MilitaryIdRequest,
-)
+# Читаем env напрямую: core.config импортирует database.models, а тот тянет этот модуль (цикл).
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL not found")
+
+engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+# expire_on_commit=False: объекты остаются читаемыми после закрытия сессии (аналог Beanie-документов)
+Session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 _IS_INITIALIZED = False
-MODELS = [
-    User,
-    Division,
-    ReinstatementRequest,
-    BottomMessage,
-    RoleRequest,
-    SupplyRequest,
-    DismissalRequest,
-    TransferRequest,
-    Counter,
-    TimeoffRequest,
-    PatrolRequest,
-    MaterialsReport,
-    LeaveRequest,
-    PromotionRequest,
-    MilitaryIdRequest,
-]
 
 
 async def establish_db_connection():
+    """Проверяет подключение. Схема создаётся Alembic'ом: `alembic upgrade head`."""
     global _IS_INITIALIZED
     if _IS_INITIALIZED:
         return
 
-    client = AsyncMongoClient(config.MONGO_URI, tz_aware=True)
-
-    await init_beanie(
-        database=client.get_database(config.MONGO_DB_NAME), document_models=MODELS
-    )
+    async with engine.connect():
+        pass
 
     _IS_INITIALIZED = True
     logging.info("Database connection established")

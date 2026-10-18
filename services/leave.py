@@ -14,7 +14,7 @@ from services.member import MemberService
 from services.notifications import notify_leave_rejected, notify_leave_approved, notify_leave_cancelled
 from ui.embeds.leave import leave_embed
 from utils.helpers import build_request_mentions, safe_publish_request
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_senior_officer, is_higher_rank
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ class LeaveService:
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db or target_user_db.rank is None:
             await atomic_status_transition(
-                LeaveRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+                LeaveRequest, request_id, "PENDING", "REJECTED",
                 extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
             )
             raise ServiceError("❌ Пользователь не состоит на службе.")
@@ -190,7 +190,7 @@ class LeaveService:
         member = await interaction.client.getch_member(req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest.get_pymongo_collection(), request_id, "PENDING", "APPROVED",
+            LeaveRequest, request_id, "PENDING", "APPROVED",
             extra_fields={
                 "reviewer_id": interaction.user.id,
                 "approved_at": now,
@@ -242,7 +242,7 @@ class LeaveService:
         await cls._validate_reviewer_permissions(officer, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            LeaveRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -278,7 +278,7 @@ class LeaveService:
             await cls._validate_reviewer_permissions(initiator, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest.get_pymongo_collection(), request_id, "APPROVED", "ANNULLED",
+            LeaveRequest, request_id, "APPROVED", "ANNULLED",
             extra_fields={"annuller_id": interaction.user.id, "annulled_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -319,7 +319,7 @@ class LeaveService:
             ServiceError: Если заявление уже обработано офицером или не найдено.
         """
         updated_dict = await atomic_status_transition(
-            LeaveRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            LeaveRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"annuller_id": user_id, "annulled_at": discord.utils.utcnow()},
             extra_filter={"user_id": user_id},
         )

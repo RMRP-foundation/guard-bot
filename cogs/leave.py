@@ -13,7 +13,7 @@ from ui.embeds.leave import leave_embed
 from ui.views.leave import ICLeaveApplyView, OOCLeaveApplyView
 from utils.bottom_message import update_bottom_message as _update_bottom_message
 from utils.helpers import safe_edit_message, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_service
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ async def schedule_leave_activation(bot: Bot, request: LeaveRequest):
 async def _expire_leave(bot: Bot, request_id: int):
     """Завершает отпуск по истечении срока."""
     updated_dict = await atomic_status_transition(
-        LeaveRequest.get_pymongo_collection(), request_id, "APPROVED", "EXPIRED",
+        LeaveRequest, request_id, "APPROVED", "EXPIRED",
     )
     if not updated_dict:
         return

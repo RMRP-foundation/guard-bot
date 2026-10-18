@@ -14,7 +14,7 @@ from services.notifications import notify_dismissed, notify_blacklisted
 from ui.embeds.dismissal import dismissal_embed
 from utils.dismissal_logic import check_and_apply_penalty, cleanup_user_leaves
 from utils.helpers import build_request_mentions, safe_publish_request
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_higher_rank
 from utils.user_data import set_name_if_changed
 
@@ -107,7 +107,7 @@ class DismissalService:
 
         if target_user_db.rank is None:
             await atomic_status_transition(
-                DismissalRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+                DismissalRequest, request_id, "PENDING", "REJECTED",
                 extra_fields={"reviewer_id": officer_user_db.discord_id, "reviewed_at": discord.utils.utcnow()},
             )
             raise ServiceError("❌ Военнослужащий уже уволен. Рапорт отклонён.")
@@ -127,7 +127,7 @@ class DismissalService:
             extra_fields["reject_reason"] = reject_reason
 
         updated_dict = await atomic_status_transition(
-            DismissalRequest.get_pymongo_collection(), request_id, "PENDING", new_status, extra_fields=extra_fields,
+            DismissalRequest, request_id, "PENDING", new_status, extra_fields=extra_fields,
         )
         if not updated_dict:
             raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
@@ -225,7 +225,7 @@ class DismissalService:
             ServiceError: Если рапорт не найден или уже обработан.
         """
         updated_dict = await atomic_status_transition(
-            DismissalRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            DismissalRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewed_at": discord.utils.utcnow()},
             extra_filter={"user_id": interaction.user.id},
         )

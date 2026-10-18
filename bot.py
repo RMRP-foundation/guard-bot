@@ -4,12 +4,13 @@ import os
 import discord
 import sentry_sdk
 from discord.ext import commands
-from pymongo import UpdateOne
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from core.config import GUILD_ID, SENTRY_DSN
 from database import divisions
-from database.connection import establish_db_connection
-from database.models import User, ReinstatementRequest
+from database.connection import establish_db_connection, Session
+from database.models import User
 from error_handling import _custom_view_on_error, on_tree_error, on_command_error
 from ui.views import load_buttons
 from services.audit import audit_logger
@@ -29,55 +30,39 @@ class Bot(commands.Bot):
         super().__init__(*args, **kwargs)
 
     async def _sync_users(self):
-        inited_ids = set(await User.distinct("discord_id", {"pre_inited": True}))
-
         guild = self.get_guild(GUILD_ID)
+        async with Session() as s:
+            inited_ids = set(await s.scalars(select(User.discord_id).where(User.pre_inited.is_(True))))
 
-        operations = []
+            rows = []
+            for member in guild.members:
+                if member.id in inited_ids:
+                    continue
+                div, pos = divisions.get_user_data(member)
+                rows.append({
+                    "discord_id": member.id,
+                    "division": div.division_id if div else None,
+                    "position": pos.name if pos else None,
+                    "rank": get_rank_from_roles(member.roles),
+                    "pre_inited": True,
+                })
 
-        for member in guild.members:
-            if member.id in inited_ids:
-                continue
+            if rows:
+                stmt = insert(User)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["discord_id"],
+                    set_={k: stmt.excluded[k] for k in ("division", "position", "rank", "pre_inited")},
+                )
+                await s.execute(stmt, rows)
+                await s.commit()
+                logger.info(f"Synchronized {len(rows)} users from guild members")
 
-            div, pos = divisions.get_user_data(member)
-            rank = get_rank_from_roles(member.roles)
-
-            op = UpdateOne(
-                {"discord_id": member.id},
-                {
-                    "$set": {
-                        "division": div.division_id if div else None,
-                        "position": pos.name if pos else None,
-                        "rank": rank,
-                        "pre_inited": True,
-                    },
-                },
-                upsert=True,
-            )
-            operations.append(op)
-
-        if operations:
-            await User.get_pymongo_collection().bulk_write(operations, ordered=False)
-            logger.info(f"Synchronized {len(operations)} users from guild members")
-
-    async def run_migrations(self):
-        await ReinstatementRequest.get_pymongo_collection().update_many(
-            {"status": {"$exists": False}},
-            [{"$set": {"status": {
-                "$cond": [
-                    "$checked",
-                    {"$cond": ["$approved", "APPROVED", "REJECTED"]},
-                    {"$cond": ["$approved", "ATTESTATION", "PENDING"]}
-                ]
-            }}}]
-        )
 
     async def on_ready(self):
         print("done")
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logger.info("------")
         await self._sync_users()
-        await self.run_migrations()
         from cogs.leave import restore_leave_timers
         await restore_leave_timers(self)
 

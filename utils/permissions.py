@@ -59,11 +59,11 @@ def has_penalty_roles(member: discord.Member) -> bool:
         return False
     return any(r.id in config.PENALTY_ROLES for r in member.roles)
 
-def has_disciplinary_restrictions(member: discord.Member, check_investigation: bool = True) -> bool:
+def has_disciplinary_restrictions(member: discord.Member) -> bool:
     """Общая проверка на выговоры/предупреждения."""
     if has_penalty_roles(member):
         return True
-    return check_investigation
+    return False
 
 def can_assign_position(
     editor_discord_id: int,

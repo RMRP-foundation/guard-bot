@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 import discord
-from beanie.odm.operators.find.comparison import In
 
 from core import config
 from core.config import RankIndex, DivisionId
@@ -16,7 +15,7 @@ from services.member import MemberService
 from services.notifications import notify_promoted, notify_promotion_approved, notify_promotion_rejected
 from ui.embeds.promotion import promotion_embed
 from utils.helpers import safe_publish_request, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import has_disciplinary_restrictions, is_high_command
 
 logger = logging.getLogger(__name__)
@@ -146,7 +145,7 @@ class PromotionService:
         """
         existing = await PromotionRequest.find_one(
             PromotionRequest.user_id == interaction.user.id,
-            In(PromotionRequest.status, ["PENDING", "APPROVED"]),
+            PromotionRequest.status.in_(["PENDING", "APPROVED"]),
         )
         if existing:
             raise ServiceError(f"❌ У вас уже есть активный рапорт #{existing.id}.")
@@ -172,7 +171,7 @@ class PromotionService:
         cls.validate_can_review(approver, div, req)
 
         updated_dict = await atomic_status_transition(
-            PromotionRequest.get_pymongo_collection(), request_id, "PENDING", "APPROVED",
+            PromotionRequest, request_id, "PENDING", "APPROVED",
             extra_fields={"reviewer_id": interaction.user.id},
         )
         if not updated_dict:
@@ -203,7 +202,7 @@ class PromotionService:
         cls.validate_can_review(reviewer, div, req)
 
         updated_dict = await atomic_status_transition(
-            PromotionRequest.get_pymongo_collection(), request_id, ["PENDING", "APPROVED"], "REJECTED",
+            PromotionRequest, request_id, ["PENDING", "APPROVED"], "REJECTED",
             extra_fields={"reviewer_id": interaction.user.id, "reject_reason": reason},
         )
         if not updated_dict:
@@ -242,7 +241,7 @@ class PromotionService:
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db or target_user_db.rank is None:
             await atomic_status_transition(
-                PromotionRequest.get_pymongo_collection(), request_id, "APPROVED", "REJECTED",
+                PromotionRequest, request_id, "APPROVED", "REJECTED",
                 extra_fields={"reviewer_id": interaction.user.id, "reject_reason": "Военнослужащий уволен."},
             )
             raise ServiceError("❌ Военнослужащий больше не состоит на службе.")
@@ -260,7 +259,7 @@ class PromotionService:
             )
 
         updated_dict = await atomic_status_transition(
-            PromotionRequest.get_pymongo_collection(), request_id, "APPROVED", "PROMOTED",
+            PromotionRequest, request_id, "APPROVED", "PROMOTED",
             extra_fields={"promoted_by": interaction.user.id},
         )
         if not updated_dict:
@@ -299,7 +298,7 @@ class PromotionService:
             ServiceError: Если рапорт не найден или уже обработан.
         """
         updated_dict = await atomic_status_transition(
-            PromotionRequest.get_pymongo_collection(), request_id, "PENDING", "CANCELLED",
+            PromotionRequest, request_id, "PENDING", "CANCELLED",
             extra_filter={"user_id": user_id},
         )
         if not updated_dict:

@@ -1,38 +1,49 @@
 import datetime
-from enum import Enum
-from typing import Dict
 
 import discord
-from beanie import Document, Indexed
-from pydantic import BaseModel, Field
-from pymongo import IndexModel
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, desc
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core import constants
+from database.base import Doc, PydanticJSON
+# Re-export: остальной код импортирует эти имена из database.models
+from database.schemas import (  # noqa: F401
+    Blacklist, DismissalType, ExtendedRoleData, LeaveType, Position, Privilege,
+    ReinstatementData, RoleData, RoleType,
+)
+
+BigInt = BigInteger
+TZ = DateTime(timezone=True)
 
 
-class Privilege(Enum):
-    COMMANDER = 4
-    DEPUTY_COMMANDER = 3
-    OFFICER = 2
-    DEFAULT = 1
+def _enum(enum_cls) -> SAEnum:
+    # В БД лежит .value ("IC", "ПСЖ"), как раньше в Mongo
+    return SAEnum(enum_cls, native_enum=False, length=32, values_callable=lambda e: [m.value for m in e])
 
 
-class Position(BaseModel):
-    name: str
-    role_id: int
-    privilege: Privilege = Privilege.DEFAULT
+def _pk() -> Mapped[int]:
+    # id заявок выдаёт get_next_id() (nextval), поэтому в конструктор передаётся явно
+    return mapped_column(Integer, primary_key=True, autoincrement=True)
 
 
-class Division(Document):
-    division_id: int = Field(alias="id")
-    name: str
-    abbreviation: str
-    role_id: int
-    transfer_channel: int | None = None
-    description: str | None = None
-    emoji: str | None = None
-    positions: list[Position] | None = None
-    promotion_channel: int | None = None
+def _now() -> Mapped[datetime.datetime]:
+    return mapped_column(TZ, default_factory=discord.utils.utcnow)
+
+
+class Division(Doc):
+    __tablename__ = "divisions"
+
+    division_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    name: Mapped[str] = mapped_column(String)
+    abbreviation: Mapped[str] = mapped_column(String)
+    role_id: Mapped[int] = mapped_column(BigInt)
+    transfer_channel: Mapped[int | None] = mapped_column(BigInt, default=None)
+    description: Mapped[str | None] = mapped_column(String, default=None)
+    emoji: Mapped[str | None] = mapped_column(String, default=None)
+    positions: Mapped[list[Position] | None] = mapped_column(PydanticJSON(list[Position]), default=None)
+    promotion_channel: Mapped[int | None] = mapped_column(BigInt, default=None)
 
     def get_position_by_name(self, name: str) -> Position | None:
         if not self.positions:
@@ -42,36 +53,24 @@ class Division(Document):
                 return pos
         return None
 
-    class Settings:
-        name = "divisions"
 
+class User(Doc):
+    __tablename__ = "users"
+    __table_args__ = (Index("ix_users_division_rank", "division", desc("rank")),)
 
-class Blacklist(BaseModel):
-    initiator: int
-    reason: str
-    evidence: str
-    ends_at: datetime.datetime | None = None
-
-    def __bool__(self):
-        if self.ends_at is None:
-            return True
-        return discord.utils.utcnow() < self.ends_at
-
-
-class User(Document):
-    discord_id: Indexed(int, unique=True)
-    static: int | None = None
-    first_name: str | None = None
-    last_name: str | None = None
-    rank: int | None = None
-    position: str | None = None
-    division: int | None = None
-    leave_status: str | None = None
-    invited_at: datetime.datetime | None = None
-    blacklist: Blacklist | None = None
-    last_supply_at: datetime.datetime | None = None
-    has_military_id: bool = False
-    pre_inited: bool = False
+    discord_id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=False)
+    static: Mapped[int | None] = mapped_column(Integer, default=None)
+    first_name: Mapped[str | None] = mapped_column(String, default=None)
+    last_name: Mapped[str | None] = mapped_column(String, default=None)
+    rank: Mapped[int | None] = mapped_column(Integer, default=None)
+    position: Mapped[str | None] = mapped_column(String, default=None)
+    division: Mapped[int | None] = mapped_column(Integer, default=None)
+    leave_status: Mapped[str | None] = mapped_column(String, default=None)
+    invited_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    blacklist: Mapped[Blacklist | None] = mapped_column(PydanticJSON(Blacklist), default=None)
+    last_supply_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    has_military_id: Mapped[bool] = mapped_column(Boolean, default=False)
+    pre_inited: Mapped[bool] = mapped_column(Boolean, default=False)
 
     @property
     def full_name(self) -> str | None:
@@ -113,14 +112,7 @@ class User(Document):
 
     @staticmethod
     async def get_active_soldier(discord_id: int) -> "User | None":
-        """Возвращает пользователя, если он состоит на службе (rank задан), иначе None.
-
-        Args:
-            discord_id: Discord ID пользователя.
-
-        Returns:
-            User или None.
-        """
+        """Возвращает пользователя, если он состоит на службе (rank задан), иначе None."""
         user = await User.get_by_discord_id(discord_id)
         if not user or user.rank is None:
             return None
@@ -128,241 +120,183 @@ class User(Document):
 
     @classmethod
     async def get_by_discord_id(cls, discord_id: int) -> "User | None":
-        """Находит пользователя в базе данных по его Discord ID.
-
-        Args:
-            discord_id: Discord ID пользователя.
-
-        Returns:
-            Объект User, если пользователь найден; в противном случае None.
-        """
+        """Находит пользователя в базе данных по его Discord ID."""
         return await cls.find_one(cls.discord_id == discord_id)
 
-    class Settings:
-        name = "users"
-        indexes = [IndexModel([("division", 1), ("rank", -1)])]
+
+class ReinstatementRequest(Doc):
+    __tablename__ = "reinstatement_requests"
+
+    id: Mapped[int] = _pk()
+    user: Mapped[int] = mapped_column(BigInt)
+    data: Mapped[ReinstatementData] = mapped_column(PydanticJSON(ReinstatementData))
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    rank: Mapped[int | None] = mapped_column(Integer, default=None)
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    reject_reason: Mapped[str | None] = mapped_column(String, default=None)
+    sent_at: Mapped[datetime.datetime] = _now()
 
 
-class ReinstatementData(BaseModel):
-    full_name: str
-    all_documents: str
-    certificate: str
+class RoleRequest(Doc):
+    __tablename__ = "role_requests"
+
+    id: Mapped[int] = _pk()
+    user: Mapped[int] = mapped_column(BigInt)
+    role_type: Mapped[RoleType] = mapped_column(_enum(RoleType), default=RoleType.ARMY)
+    data: Mapped[RoleData | None] = mapped_column(PydanticJSON(RoleData), default=None)
+    extended_data: Mapped[ExtendedRoleData | None] = mapped_column(PydanticJSON(ExtendedRoleData), default=None)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    sent_at: Mapped[datetime.datetime] = _now()
+    message_id: Mapped[int | None] = mapped_column(BigInt, default=None)
 
 
-class ReinstatementRequest(Document):
-    id: int
-    user: int
-    data: ReinstatementData
-    status: str = "PENDING"
-    rank: int | None = None
-    reject_reason: str | None = None
-    sent_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
+class TimeoffRequest(Doc):
+    __tablename__ = "timeoff_requests"
 
-    class Settings:
-        name = "reinstatement_requests"
-
-
-class RoleType(str, Enum):
-    ARMY = "army"  # ВС РФ
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    data: Mapped[RoleData] = mapped_column(PydanticJSON(RoleData))
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    period: Mapped[str | None] = mapped_column(String, default=None)
+    sent_at: Mapped[datetime.datetime] = _now()
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
 
-class RoleData(BaseModel):
-    full_name: str
-    static_id: int
+class SupplyRequest(Doc):
+    __tablename__ = "supply_requests"
+    __table_args__ = (Index("ix_supply_user_status_created", "user_id", "status", desc("created_at")),)
+
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    items: Mapped[dict[str, int]] = mapped_column(JSONB, default_factory=dict)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    message_id: Mapped[int | None] = mapped_column(BigInt, default=None)
 
 
-class ExtendedRoleData(BaseModel):
-    full_name: str
-    static_id: int
-    faction: str
-    rank_position: str
-    purpose: str | None = None  # Цель и удостоверение для гос. сотрудника
-    certificate_link: str | None = None  # Только для доступа к поставке
+class DismissalRequest(Doc):
+    __tablename__ = "dismissal_requests"
+
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    type: Mapped[DismissalType] = mapped_column(_enum(DismissalType))
+    full_name: Mapped[str] = mapped_column(String)
+    static: Mapped[int] = mapped_column(Integer)
+    rank_index: Mapped[int | None] = mapped_column(Integer, default=None)
+    division_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    position: Mapped[str | None] = mapped_column(String, default=None)
+    reject_reason: Mapped[str | None] = mapped_column(String, default=None)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
 
-class RoleRequest(Document):
-    id: int
-    user: int
-    role_type: RoleType = RoleType.ARMY
-    data: RoleData | None = None
-    extended_data: ExtendedRoleData | None = None
-    status: str = "PENDING"
-    sent_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    message_id: int | None = None
+class TransferRequest(Doc):
+    __tablename__ = "transfer_requests"
 
-    class Settings:
-        name = "role_requests"
-
-class TimeoffRequest(Document):
-    id: int
-    user_id: int
-    data: RoleData
-    status: str = "PENDING"
-    period: str | None = None
-    sent_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    reviewed_at: datetime.datetime | None = None
-
-    class Settings:
-        name = "timeoff_requests"
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    full_name: Mapped[str] = mapped_column(String)
+    static: Mapped[int] = mapped_column(Integer)
+    name_age: Mapped[str] = mapped_column(String)
+    timezone: Mapped[str] = mapped_column(String)
+    online_prime: Mapped[str] = mapped_column(String)
+    motivation: Mapped[str] = mapped_column(String)
+    new_division_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String)
+    old_division_id: Mapped[int] = mapped_column(Integer, default=0)
+    old_reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    new_reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    old_reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    new_reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    reject_reason: Mapped[str | None] = mapped_column(String, default=None)
 
 
-class SupplyRequest(Document):
-    id: int
-    user_id: int
-    items: Dict[str, int] = Field(default_factory=dict)
-    status: str = "PENDING"
-    reviewer_id: int | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    reviewed_at: datetime.datetime | None = None
-    message_id: int | None = None  # ID сообщения в канале
+class PatrolRequest(Doc):
+    __tablename__ = "patrol_requests"
 
-    class Settings:
-        name = "supply_requests"
-        indexes = [
-            IndexModel([("user_id", 1), ("status", 1), ("created_at", -1)])
-        ]
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    full_name: Mapped[str] = mapped_column(String)
+    reason: Mapped[str] = mapped_column(String)
+    date: Mapped[datetime.datetime] = _now()
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
 
-class DismissalType(str, Enum):
-    PJS = "ПСЖ"
-    AUTO = "Потеря спец. связи"
+class MaterialsReport(Doc):
+    __tablename__ = "materials_reports"
+
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    full_name: Mapped[str] = mapped_column(String)
+    quantity: Mapped[int] = mapped_column(Integer)
+    evidence: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime.datetime] = _now()
 
 
-class DismissalRequest(Document):
-    id: int
-    user_id: int
-    type: DismissalType
-    full_name: str
-    static: int
+class LeaveRequest(Doc):
+    __tablename__ = "leave_requests"
+    __table_args__ = (Index("ix_leave_status_ends", "status", "ends_at"),)
 
-    rank_index: int | None = None
-    division_id: int | None = None
-    position: str | None = None
-    reject_reason: str | None = None
-
-    status: str = "PENDING"  # PENDING, APPROVED, REJECTED
-    reviewer_id: int | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    reviewed_at: datetime.datetime | None = None
-
-    class Settings:
-        name = "dismissal_requests"
-
-
-class TransferRequest(Document):
-    id: int
-    user_id: int
-    full_name: str
-    static: int
-    name_age: str
-    timezone: str
-    online_prime: str
-    motivation: str
-    new_division_id: int
-    old_division_id: int = 0
-
-    status: str  # OLD_DIVISION_REVIEW, NEW_DIVISION_REVIEW, APPROVED, REJECTED
-    old_reviewer_id: int | None = None
-    new_reviewer_id: int | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    old_reviewed_at: datetime.datetime | None = None
-    new_reviewed_at: datetime.datetime | None = None
-    reject_reason: str | None = None
-
-    class Settings:
-        name = "transfer_requests"
-
-class PatrolRequest(Document):
-    id: int
-    user_id: int
-    full_name: str
-    reason: str
-    date: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    status: str = "PENDING"
-    reviewer_id: int | None = None
-
-    class Settings:
-        name = "patrol_requests"
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    leave_type: Mapped[LeaveType] = mapped_column(_enum(LeaveType))
+    reason: Mapped[str] = mapped_column(String)
+    starts_at: Mapped[datetime.datetime] = mapped_column(TZ)
+    ends_at: Mapped[datetime.datetime] = mapped_column(TZ)
+    original_nick: Mapped[str | None] = mapped_column(String, default=None)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    annuller_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    annulled_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    approved_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    message_id: Mapped[int | None] = mapped_column(BigInt, default=None)
 
 
-class MaterialsReport(Document):
-    id: int
-    user_id: int
-    full_name: str
-    quantity: int
-    evidence: str
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
+class PromotionRequest(Doc):
+    __tablename__ = "promotion_reports"
+    __table_args__ = (Index("ix_promotion_user_status", "user_id", "status"),)
 
-    class Settings:
-        name = "materials_reports"
-
-
-class LeaveType(str, Enum):
-    IC = "IC"
-    OOC = "OOC"
-
-
-class LeaveRequest(Document):
-    id: int
-    user_id: int
-    leave_type: LeaveType
-    reason: str
-    starts_at: datetime.datetime
-    ends_at: datetime.datetime
-    original_nick: str | None = None
-
-    status: str = "PENDING"
-    reviewer_id: int | None = None
-    annuller_id: int | None = None
-    annulled_at: datetime.datetime | None = None
-
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    approved_at: datetime.datetime | None = None
-    message_id: int | None = None
-
-    class Settings:
-        name = "leave_requests"
-        indexes = [IndexModel([("status", 1), ("ends_at", 1)])]
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    division_id: Mapped[int] = mapped_column(Integer)
+    current_rank: Mapped[int] = mapped_column(Integer)
+    target_rank: Mapped[int] = mapped_column(Integer)
+    evidence: Mapped[dict[str, str]] = mapped_column(JSONB, default_factory=dict)
+    score: Mapped[str | None] = mapped_column(String, default=None)
+    reject_reason: Mapped[str | None] = mapped_column(String, default=None)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    promoted_by: Mapped[int | None] = mapped_column(BigInt, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    message_id: Mapped[int | None] = mapped_column(BigInt, default=None)
 
 
-class PromotionRequest(Document):
-    id: int
-    user_id: int
-    division_id: int
-    current_rank: int
-    target_rank: int
-    evidence: Dict[str, str] = Field(default_factory=dict)
-    score: str | None = None
-    reject_reason: str | None = None
-    status: str = "PENDING"  # PENDING, APPROVED, PROMOTED, REJECTED, CANCELLED
-    reviewer_id: int | None = None
-    promoted_by: int | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    message_id: int | None = None
+class MilitaryIdRequest(Doc):
+    __tablename__ = "military_id_requests"
 
-    class Settings:
-        name = "promotion_reports"
-        indexes = [IndexModel([("user_id", 1), ("status", 1)])]
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    full_name: Mapped[str] = mapped_column(String)
+    evidence: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="PENDING")
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    reject_reason: Mapped[str | None] = mapped_column(String, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
 
-class MilitaryIdRequest(Document):
-    id: int
-    user_id: int
-    full_name: str
-    evidence: str
-    status: str = "PENDING"  # PENDING, APPROVED, REJECTED
-    reviewer_id: int | None = None
-    reject_reason: str | None = None
-    created_at: datetime.datetime = Field(default_factory=discord.utils.utcnow)
-    reviewed_at: datetime.datetime | None = None
+class BottomMessage(Doc):
+    __tablename__ = "bottom_messages"
 
-    class Settings:
-        name = "military_id_requests"
-
-
-class BottomMessage(Document):
-    channel_id: Indexed(int, unique=True)
-    message_id: int
-
-    class Settings:
-        name = "bottom_messages"
+    channel_id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=False)
+    message_id: Mapped[int] = mapped_column(BigInt)

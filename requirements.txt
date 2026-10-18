@@ -1,7 +1,8 @@
 discord.py~=2.6.4
-pymongo~=4.16.0
+sqlalchemy[asyncio]>=2.0
+asyncpg
+alembic
 python-dotenv~=1.2.1
-beanie~=2.0.1
 cachetools~=5.5.2
 dateparser~=1.4.0
 sentry-sdk

@@ -16,11 +16,7 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise Exception("TOKEN not found")
 
-MONGO_URI = os.getenv("MONGO_URI")
-if not MONGO_URI:
-    MONGO_URI = "mongodb://localhost:27017"
-    logger.warning("MONGO_URI not found, using default value")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "TolyaBot")
+
 
 ENVIRONMENT = os.getenv("ENVIRONMENT")
 if not ENVIRONMENT:

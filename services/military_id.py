@@ -12,7 +12,7 @@ from database.models import MilitaryIdRequest, User
 from services.notifications import notify_military_id_approved, notify_military_id_rejected
 from ui.embeds.military_id import military_id_embed
 from utils.helpers import safe_publish_request, build_officer_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_senior_officer
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class MilitaryIdService:
         cls.validate_reviewer_permissions(officer, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            MilitaryIdRequest.get_pymongo_collection(),
+            MilitaryIdRequest,
             request_id,
             "PENDING",
             "APPROVED",
@@ -140,7 +140,7 @@ class MilitaryIdService:
         cls.validate_reviewer_permissions(officer, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            MilitaryIdRequest.get_pymongo_collection(),
+            MilitaryIdRequest,
             request_id,
             "PENDING",
             "REJECTED",

@@ -17,7 +17,7 @@ from services.member import MemberService
 from services.notifications import notify_role_approved, notify_role_rejected
 from ui.embeds.role_getting import role_embed
 from utils.helpers import safe_edit_message, safe_publish_request, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import check_rank_silent
 from utils.user_data import set_name_if_changed
 
@@ -74,7 +74,7 @@ class RoleService:
             ServiceError: Если заявка уже обработана параллельно.
         """
         updated_dict = await atomic_status_transition(
-            RoleRequest.get_pymongo_collection(), request.id, "PENDING", "REJECTED",
+            RoleRequest, request.id, "PENDING", "REJECTED",
         )
         if not updated_dict:
             raise ServiceError(f"### ⏳ Заявка #{request.id} уже подана\nПодождите завершения.")
@@ -206,7 +206,7 @@ class RoleService:
         cls._validate_reviewer_permissions(officer, req.role_type, req.user)
 
         updated_dict = await atomic_status_transition(
-            RoleRequest.get_pymongo_collection(), request_id, "PENDING", "APPROVED",
+            RoleRequest, request_id, "PENDING", "APPROVED",
             extra_fields={"reviewer_id": interaction.user.id, "sent_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -240,7 +240,7 @@ class RoleService:
         cls._validate_reviewer_permissions(officer, req.role_type, req.user)
 
         updated_dict = await atomic_status_transition(
-            RoleRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            RoleRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewer_id": interaction.user.id, "sent_at": discord.utils.utcnow()},
         )
         if not updated_dict:

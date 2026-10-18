@@ -13,7 +13,7 @@ from database.models import RoleData, TimeoffRequest, User
 from services.notifications import notify_timeoff_approved, notify_timeoff_rejected
 from ui.embeds.timeoff import timeoff_embed
 from utils.helpers import build_request_mentions, safe_publish_request
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_senior_officer, is_higher_rank
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ class TimeoffService:
         cls._validate_reviewer_permissions(officer, target_user)
 
         updated_dict = await atomic_status_transition(
-            TimeoffRequest.get_pymongo_collection(), request_id, "PENDING", "APPROVED",
+            TimeoffRequest, request_id, "PENDING", "APPROVED",
             extra_fields={"reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -165,7 +165,7 @@ class TimeoffService:
         cls._validate_reviewer_permissions(officer, target_user)
 
         updated_dict = await atomic_status_transition(
-            TimeoffRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            TimeoffRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -190,7 +190,7 @@ class TimeoffService:
             ServiceError: Если заявка не найдена или уже обработана офицером.
         """
         updated_dict = await atomic_status_transition(
-            TimeoffRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            TimeoffRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewed_at": discord.utils.utcnow()}, extra_filter={"user_id": user_id},
         )
         if not updated_dict:

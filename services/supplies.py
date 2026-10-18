@@ -4,17 +4,19 @@ from dataclasses import dataclass
 from typing import Callable
 
 import discord
+from sqlalchemy import update
 
 from core import config
 from core.config import RankIndex
 from core.constants import SUPPLY_ITEMS, SUPPLY_LIMITS
 from core.exceptions import ServiceError
+from database.connection import Session
 from database.counters import get_next_id
 from database.models import SupplyRequest, User
 from ui.embeds.supplies import supplies_embed
 from ui.embeds.supplies_audit import supply_issuance_embed
 from utils.helpers import safe_edit_message, safe_publish_request, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import has_penalty_roles, is_senior_officer
 
 logger = logging.getLogger(__name__)
@@ -156,7 +158,7 @@ class SupplyService:
         cls._check_supply_cooldown(user_db.last_supply_at)
 
         updated_dict = await atomic_status_transition(
-            SupplyRequest.get_pymongo_collection(), request.id, "DRAFT", "PENDING",
+            SupplyRequest, request.id, "DRAFT", "PENDING",
             extra_fields={"items": items, "created_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -175,7 +177,7 @@ class SupplyService:
         cls.validate_limits(items)
 
         updated_dict = await atomic_status_transition(
-            SupplyRequest.get_pymongo_collection(), request.id, "PENDING", "PENDING", extra_fields={"items": items},
+            SupplyRequest, request.id, "PENDING", "PENDING", extra_fields={"items": items},
         )
         if not updated_dict:
             raise ServiceError("❌ Заявка уже обработана другим офицером.")
@@ -209,7 +211,7 @@ class SupplyService:
 
         now = discord.utils.utcnow()
         updated_dict = await atomic_status_transition(
-            SupplyRequest.get_pymongo_collection(), request_id, "PENDING", "APPROVED",
+            SupplyRequest, request_id, "PENDING", "APPROVED",
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": now},
         )
         if not updated_dict:
@@ -219,14 +221,17 @@ class SupplyService:
         target_user.last_supply_at = now
         await target_user.save()
 
-        await SupplyRequest.get_pymongo_collection().update_many(
-            {"user_id": request.user_id, "status": "PENDING", "_id": {"$ne": request.id}},
-            {"$set": {
-                "status": "REJECTED",
-                "reviewer_id": interaction.client.user.id if interaction.client.user else None,
-                "reviewed_at": now,
-            }},
-        )
+        async with Session() as s:
+            await s.execute(
+                update(SupplyRequest)
+                .where(SupplyRequest.user_id == request.user_id,
+                       SupplyRequest.status == "PENDING",
+                       SupplyRequest.id != request.id)
+                .values(status="REJECTED",
+                        reviewer_id=interaction.client.user.id if interaction.client.user else None,
+                        reviewed_at=now)
+            )
+            await s.commit()
 
         await cls._send_storage_audit(interaction, request)
 
@@ -265,7 +270,7 @@ class SupplyService:
         cls._validate_reviewer_permissions(officer)
 
         updated_dict = await atomic_status_transition(
-            SupplyRequest.get_pymongo_collection(), request_id, "PENDING", "REJECTED",
+            SupplyRequest, request_id, "PENDING", "REJECTED",
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:

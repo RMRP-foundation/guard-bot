@@ -265,15 +265,7 @@ class Blacklist(commands.GroupCog, group_name="blacklist", group_description="Ч
 
     @app_commands.command(name="list", description="Показать активный черный список")
     async def list_(self, interaction: discord.Interaction):
-        users = await User.find(
-            {
-                "blacklist": {"$ne": None},
-                "$or": [
-                    {"blacklist.ends_at": None},
-                    {"blacklist.ends_at": {"$gt": discord.utils.utcnow()}},
-                ],
-            }
-        ).to_list()
+        users = [u for u in await User.find(User.blacklist.is_not(None)).to_list() if u.blacklist]
 
         if not users:
             container = discord.ui.Container()

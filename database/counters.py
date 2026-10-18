@@ -1,27 +1,13 @@
-from beanie import Document
-from pymongo import ReturnDocument
+from sqlalchemy import text
 
-
-class Counter(Document):
-    """Счетчик для атомарной генерации ID"""
-
-    name: str
-    value: int = 0
-
-    class Settings:
-        name = "counters"
+from database.connection import Session
 
 
 async def get_next_id(collection_name: str) -> int:
-    """
-    Атомарно получает следующий ID для указанной коллекции.
-    Использует findAndModify с upsert и $inc для предотвращения race conditions.
-    """
-    result = await Counter.get_pymongo_collection().find_one_and_update(
-        {"name": collection_name},
-        {"$inc": {"value": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
-
-    return result["value"]
+    """Атомарно берёт следующий id из sequence таблицы (имя = имя бывшей коллекции)."""
+    async with Session() as s:
+        value = await s.scalar(
+            text("SELECT nextval(pg_get_serial_sequence(:t, 'id'))"), {"t": collection_name}
+        )
+        await s.commit()
+    return value

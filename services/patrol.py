@@ -12,7 +12,7 @@ from database.counters import get_next_id
 from database.models import PatrolRequest, User
 from ui.embeds.patrol import patrol_embed
 from utils.helpers import safe_publish_request, build_mentions
-from utils.mongo_atomic import atomic_status_transition
+from utils.atomic import atomic_status_transition
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ class PatrolService:
 
         target_status, status_text, emoji = STATUS_TEXT[action]
         updated_dict = await atomic_status_transition(
-            PatrolRequest.get_pymongo_collection(), request_id, "PENDING", target_status,
+            PatrolRequest, request_id, "PENDING", target_status,
             extra_fields={"reviewer_id": interaction.user.id},
         )
         if not updated_dict:

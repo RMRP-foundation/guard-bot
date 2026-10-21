@@ -50,7 +50,7 @@ class ReinstatementService:
         has_perm = is_high_command(officer)
         if not has_perm and officer.division:
             div = divisions.get_division(officer.division)
-            if div and div.division_id == DivisionId.USB:
+            if div and div.division_id in [DivisionId.USB, DivisionId.CPP]:
                 has_perm = True
 
         if not has_perm:
@@ -196,7 +196,10 @@ class ReinstatementService:
         if not target_user_db:
             target_user_db = User(discord_id=request.user, pre_inited=True)
         target_user_db.rank = rank_index
-        target_user_db.division = DivisionId.VBP
+        if rank_index > RankIndex.JUNIOR_SERGEANT:
+            target_user_db.division = DivisionId.VBP
+        else:
+            target_user_db.division = DivisionId.AVNG
         await target_user_db.save()
 
         member = await interaction.client.getch_member(request.user)

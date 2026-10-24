@@ -110,7 +110,7 @@ class DismissalService:
                 DismissalRequest, request_id, "PENDING", "REJECTED",
                 extra_fields={"reviewer_id": officer_user_db.discord_id, "reviewed_at": discord.utils.utcnow()},
             )
-            raise ServiceError("❌ Военнослужащий уже уволен. Рапорт отклонён.")
+            raise ServiceError("❌ Сотрудник уже уволен. Рапорт отклонён.")
 
         if not is_higher_rank(officer_user_db, target_user_db):
             raise ServiceError("❌ Вы не можете обрабатывать рапорт военнослужащего равного или старшего звания.")

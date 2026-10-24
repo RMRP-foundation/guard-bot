@@ -242,9 +242,9 @@ class PromotionService:
         if not target_user_db or target_user_db.rank is None:
             await atomic_status_transition(
                 PromotionRequest, request_id, "APPROVED", "REJECTED",
-                extra_fields={"reviewer_id": interaction.user.id, "reject_reason": "Военнослужащий уволен."},
+                extra_fields={"reviewer_id": interaction.user.id, "reject_reason": "Сотрудник уволен."},
             )
-            raise ServiceError("❌ Военнослужащий больше не состоит на службе.")
+            raise ServiceError("❌ Сотрудник больше не состоит на службе.")
 
         if target_user_db.rank != req.current_rank:
             raise ServiceError(
@@ -287,7 +287,7 @@ class PromotionService:
             embed=promotion_embed(request, target_user_db),
             view=indicator_view("Повышен", emoji="⭐"),
             mention_ids=[request.user_id, request.reviewer_id, interaction.user.id],
-            message="✅ Военнослужащий повышен.",
+            message="✅ Сотрудник повышен.",
         )
 
     @staticmethod

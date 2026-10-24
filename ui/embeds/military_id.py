@@ -17,7 +17,7 @@ def military_id_embed(request: MilitaryIdRequest, user: User | None) -> discord.
     static_str = format_static(user.static) if user else "Не указан"
     rank_str = format_rank(user.rank) if user else "Не указано"
 
-    embed.add_field(name="Военнослужащий", value=request.full_name, inline=True)
+    embed.add_field(name="Сотрудник", value=request.full_name, inline=True)
     embed.add_field(name="Статик", value=static_str, inline=True)
     embed.add_field(name="Звание", value=rank_str, inline=False)
     embed.add_field(name="Военный билет", value=request.evidence, inline=False)

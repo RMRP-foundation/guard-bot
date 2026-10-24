@@ -90,7 +90,7 @@ class UserEdit(commands.Cog):
         async def on_submit(modal_interaction: discord.Interaction):
             current_user_info = await User.get_by_discord_id(user.id)
             if not current_user_info or current_user_info.rank is None:
-                await safe_respond(modal_interaction, "❌ Военнослужащий уже не состоит на службе.")
+                await safe_respond(modal_interaction, "❌ Сотрудник уже не состоит на службе.")
                 return
 
             initiator_db = await self._check_permissions(modal_interaction, current_user_info)

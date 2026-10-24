@@ -115,13 +115,13 @@ class Blacklist(commands.GroupCog, group_name="blacklist", group_description="Ч
         super().__init__()
 
     @app_commands.command(
-        name="add", description="Добавить военнослужащего в общий черный список"
+        name="add", description="Добавить сотрудника в общий черный список"
     )
     @app_commands.rename(
-        user="военнослужащий", days="дни", reason="причина", evidence="доказательства"
+        user="сотрудник", days="дни", reason="причина", evidence="доказательства"
     )
     @app_commands.describe(
-        user="Военнослужащий для добавления в черный список",
+        user="Сотрудник для добавления в черный список",
         days="Количество дней в черном списке (-1 для бессрочного)",
         reason="Причина добавления в черный список",
         evidence="Доказательства (ссылки на скриншоты, сообщения и т.д.)",
@@ -196,9 +196,9 @@ class Blacklist(commands.GroupCog, group_name="blacklist", group_description="Ч
     @app_commands.command(
         name="remove", description="Снять военнослужащего с черного списка"
     )
-    @app_commands.rename(user="военнослужащий", reason="причина")
+    @app_commands.rename(user="сотрудник", reason="причина")
     @app_commands.describe(
-        user="Военнослужащий для снятия с черного списка",
+        user="Сотрудник для снятия с черного списка",
         reason="Причина снятия с черного списка",
     )
     async def remove(

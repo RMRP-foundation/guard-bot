@@ -104,7 +104,7 @@ class AuditLogger:
 
         embed.set_author(name=author_name)
         embed.add_field(
-            name="Военнослужащий",
+            name="Сотрудник",
             value=f"{target_info.full_name} `{format_static(target_info.static)}`"
             if target_info
             else str(target),

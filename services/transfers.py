@@ -252,7 +252,7 @@ class TransferService:
                                            "❌ У вас нет прав отклонять данное заявление.")
 
         now = discord.utils.utcnow()
-        update_fields: dict = {"status": "REJECTED", "reject_reason": reason}
+        update_fields: dict = {"reject_reason": reason}
         if officer.division == req.old_division_id:
             update_fields["old_reviewer_id"] = interaction.user.id
             update_fields["old_reviewed_at"] = now

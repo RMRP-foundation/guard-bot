@@ -100,7 +100,7 @@ class SupplyService:
         Raises:
             ServiceError: Если не выполнено любое из условий.
         """
-        min_rank = RankIndex.SENIOR_SERGEANT
+        min_rank = RankIndex.SERGEANT
         if (user_db.rank or 0) < min_rank:
             raise ServiceError(f"❌ Доступно со звания {config.RANKS[min_rank]}.")
 

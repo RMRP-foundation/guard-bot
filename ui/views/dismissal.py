@@ -52,7 +52,7 @@ class DismissalApplyView(discord.ui.LayoutView):
     container.add_item(discord.ui.Separator(visible=True))
 
     psj_button = discord.ui.Button(
-        label="ПСЖ", style=discord.ButtonStyle.secondary, custom_id="dismissal_pjs"
+        label="ПСЖ", style=discord.ButtonStyle.primary, custom_id="dismissal_pjs"
     )
     psj_button.callback = lambda inter: _open_dismissal_modal(inter, DismissalType.PJS)
 

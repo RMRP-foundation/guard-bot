@@ -14,7 +14,7 @@ from services.audit import AuditAction, audit_logger
 from services.member import MemberService
 from services.notifications import notify_transfer_approved, notify_transfer_rejected
 from ui.embeds.transfers import transfer_embed
-from utils.helpers import build_request_mentions, safe_publish_request
+from utils.helpers import build_request_mentions, safe_publish_request, build_mentions
 from utils.atomic import atomic_status_transition
 from utils.permissions import is_high_command
 
@@ -228,8 +228,9 @@ class TransferService:
         await notify_transfer_approved(interaction.client, request.user_id, div_name)
 
         from ui.views.indicators import indicator_view
+        mentions = build_mentions([request.user_id,request.old_reviewer_id,request.new_reviewer_id,])
         return TransferActionResult(
-            request=request, embed=transfer_embed(request, target_user), view=indicator_view("Одобрено", emoji="👍"),
+            request=request, embed=transfer_embed(request, target_user), mention_content=mentions, view=indicator_view("Одобрено", emoji="👍"),
         )
 
     @classmethod

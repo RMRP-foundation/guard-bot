@@ -189,7 +189,7 @@ class RejectTransferButton(
                     interaction=modal_inter, request_id=self.request_id, officer=officer, reason=reason_input.value.strip(),
                 )
             except ServiceError as error:
-                await safe_respond(modal_inter, error.message)
+                await modal_inter.followup.send(error.message, ephemeral=True)
                 return
 
             await modal_inter.edit_original_response(embed=result.embed, view=result.view)

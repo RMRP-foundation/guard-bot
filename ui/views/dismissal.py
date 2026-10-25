@@ -104,7 +104,7 @@ class DismissalManagementButton(
                 await safe_respond(modal_inter, error.message)
                 return
 
-            await modal_inter.response.edit_message(
+            await modal_inter.edit_original_response(
                 content=build_mentions([result.request.user_id, modal_inter.user.id]),
                 embed=result.embed, view=None,
             )

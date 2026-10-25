@@ -192,7 +192,7 @@ class RejectTransferButton(
                 await safe_respond(modal_inter, error.message)
                 return
 
-            await modal_inter.response.edit_message(embed=result.embed, view=result.view)
+            await modal_inter.edit_original_response(embed=result.embed, view=result.view)
 
         modal.on_submit = on_submit
         await interaction.response.send_modal(modal)

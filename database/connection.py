@@ -2,6 +2,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Читаем env напрямую: core.config импортирует database.models, а тот тянет этот модуль (цикл).
@@ -22,6 +23,11 @@ async def establish_db_connection():
     global _IS_INITIALIZED
     if _IS_INITIALIZED:
         return
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS transferred_at TIMESTAMP WITH TIME ZONE;")
+        )
 
     async with engine.connect():
         pass

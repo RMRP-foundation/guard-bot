@@ -1,14 +1,13 @@
 import datetime
 
 import discord
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, desc
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, desc, event
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, NO_VALUE
 
 from core import constants
 from database.base import Doc, PydanticJSON
-# Re-export: остальной код импортирует эти имена из database.models
 from database.schemas import (  # noqa: F401
     Blacklist, DismissalType, ExtendedRoleData, LeaveType, Position, Privilege,
     ReinstatementData, RoleData, RoleType,
@@ -67,6 +66,7 @@ class User(Doc):
     division: Mapped[int | None] = mapped_column(Integer, default=None)
     leave_status: Mapped[str | None] = mapped_column(String, default=None)
     invited_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+    transferred_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
     blacklist: Mapped[Blacklist | None] = mapped_column(PydanticJSON(Blacklist), default=None)
     last_supply_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
     has_military_id: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -300,3 +300,12 @@ class BottomMessage(Doc):
 
     channel_id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=False)
     message_id: Mapped[int] = mapped_column(BigInt)
+
+
+@event.listens_for(User.division, "set")
+def _on_division_change(target: User, value: int | None, oldvalue: int | None, initiator):
+    if oldvalue is NO_VALUE:
+        if value is not None and target.transferred_at is None:
+            target.transferred_at = discord.utils.utcnow()
+    elif oldvalue != value:
+        target.transferred_at = discord.utils.utcnow() if value is not None else None

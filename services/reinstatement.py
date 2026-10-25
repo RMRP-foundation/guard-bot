@@ -21,10 +21,6 @@ from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
 
-BASIC_ATTESTATION_ROLES = (
-    RoleId.ATTESTATION.value,
-)
-
 
 @dataclass(frozen=True)
 class ReinstatementActionResult:
@@ -80,7 +76,7 @@ class ReinstatementService:
     @staticmethod
     async def publish_request(interaction: discord.Interaction, request: ReinstatementRequest, user_db: User, view: discord.ui.View) -> None:
         """Публикует заявление в канал."""
-        division = divisions.get_division(DivisionId.USB)
+        division = divisions.get_division(DivisionId.CPP)
 
         await safe_publish_request(
             channel=interaction.channel,
@@ -110,35 +106,10 @@ class ReinstatementService:
         )
         await cls.publish_request(interaction=interaction, request=request, user_db=user_db, view=view_factory(request.id))
 
-    @staticmethod
-    async def _grant_attestation_roles(guild: discord.Guild | None, user_id: int) -> None:
-        """Выдаёт временные роли переаттестации, игнорируя отдельные сбои Discord API."""
-        if not guild:
-            return
-        for role_id in BASIC_ATTESTATION_ROLES:
-            try:
-                await guild._state.http.add_role(guild.id, user_id, role_id)
-            except discord.HTTPException:
-                logger.warning(f"Не удалось выдать роль {role_id} пользователю {user_id} при переаттестации.")
-
-    @staticmethod
-    async def _revoke_attestation_roles(guild: discord.Guild | None, user_id: int) -> None:
-        """Снимает временные роли переаттестации, игнорируя отдельные сбои Discord API."""
-        if not guild:
-            return
-        for role_id in BASIC_ATTESTATION_ROLES:
-            try:
-                await guild._state.http.remove_role(guild.id, user_id, role_id)
-            except discord.HTTPException:
-                logger.warning(f"Не удалось снять роль {role_id} с пользователя {user_id} при переаттестации.")
-
     @classmethod
-    async def start_attestation(cls, interaction: discord.Interaction, request_id: int, officer: User) -> ReinstatementActionResult:
-        """Переводит заявку в статус переаттестации (ATTESTATION) и выдаёт временные роли.
-
-        Raises:
-            ServiceError: Если заявление не найдено/уже обработано, либо нарушены права доступа.
-        """
+    async def start_attestation(cls, interaction: discord.Interaction, request_id: int,
+                                officer: User) -> ReinstatementActionResult:
+        """Переводит заявку в статус переаттестации (ATTESTATION). Никаких ролей не выдает."""
         req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
         if not req or req.status != "PENDING":
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
@@ -152,7 +123,6 @@ class ReinstatementService:
             raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
 
         request = ReinstatementRequest(**updated_dict)
-        await cls._grant_attestation_roles(interaction.guild, request.user)
         await notify_reinstatement_attestation(interaction.client, request.user)
 
         target_user_db = await User.get_by_discord_id(request.user)
@@ -165,12 +135,9 @@ class ReinstatementService:
         )
 
     @classmethod
-    async def approve_reinstatement(cls, interaction: discord.Interaction, request_id: int, rank_index: int, officer: User) -> ReinstatementActionResult:
-        """Окончательно одобряет восстановление с присвоением звания и зачислением в ВБП.
-
-        Raises:
-            ServiceError: Если заявление не найдено/не на этапе переаттестации, либо нарушены права доступа.
-        """
+    async def approve_reinstatement(cls, interaction: discord.Interaction, request_id: int, rank_index: int,
+                                    officer: User) -> ReinstatementActionResult:
+        """Окончательно одобряет восстановление с присвоением звания и выдачей испытательного срока."""
         req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
         if not req or req.status != "ATTESTATION":
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или не на этапе переаттестации.")
@@ -204,8 +171,16 @@ class ReinstatementService:
 
         member = await interaction.client.getch_member(request.user)
         if member:
-            await cls._revoke_attestation_roles(interaction.guild, request.user)
-            await MemberService.sync_member_discord(member=member, user_db=target_user_db, reason=f"Восстановление #{request.id}")
+            await MemberService.sync_member_discord(member=member, user_db=target_user_db,
+                                                    reason=f"Восстановление #{request.id}")
+
+            probation_role = member.guild.get_role(RoleId.PROBATION.value)
+            if probation_role and probation_role not in member.roles:
+                try:
+                    await member.add_roles(probation_role,
+                                           reason=f"Восстановление #{request.id} (испытательный срок)")
+                except discord.HTTPException:
+                    logger.warning(f"Не удалось выдать роль испытательного срока пользователю {request.user}")
 
         await audit_logger.log_action(AuditAction.REINSTATEMENT, interaction.user, request.user)
         await notify_reinstatement_approved(interaction.client, request.user, RANKS[rank_index])
@@ -218,12 +193,9 @@ class ReinstatementService:
         )
 
     @classmethod
-    async def reject_reinstatement(cls, interaction: discord.Interaction, request_id: int, officer: User, reason: str) -> ReinstatementActionResult:
-        """Отклоняет заявление на восстановление на этапе PENDING или ATTESTATION.
-
-        Raises:
-            ServiceError: Если заявление не найдено/уже обработано, либо нарушены права доступа.
-        """
+    async def reject_reinstatement(cls, interaction: discord.Interaction, request_id: int, officer: User,
+                                   reason: str) -> ReinstatementActionResult:
+        """Отклоняет заявление на восстановление."""
         req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
         if not req or req.status not in ("PENDING", "ATTESTATION"):
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
@@ -238,8 +210,6 @@ class ReinstatementService:
             raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
 
         request = ReinstatementRequest(**updated_dict)
-        await cls._revoke_attestation_roles(interaction.guild, request.user)
-
         target_user_db = await User.get_by_discord_id(request.user)
         await notify_reinstatement_rejected(interaction.client, request.user, reason=reason)
 

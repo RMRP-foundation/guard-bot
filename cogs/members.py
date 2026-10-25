@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import Bot
-from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex, DivisionId
+from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex, DivisionId, VBP_DAYS_LIMIT
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class MembersBrowser(discord.ui.LayoutView):
     def __init__(self, guild: discord.Guild, members: list[tuple[int, User]], division_info, members_per_page: int = 25):
-        super().__init__(timeout=600)
+        super().__init__(timeout=120)
         self.guild = guild
         self.members = members
         self.division_info = division_info
@@ -35,17 +35,22 @@ class MembersBrowser(discord.ui.LayoutView):
     def _format_member(self, i: int, u: User) -> str:
         div_id = getattr(self.division_info, "division_id", None)
 
-        overdue = (
-            div_id is not None
-            and div_id == DivisionId.AVNG
-            and u.invited_at is not None
-            and (discord.utils.utcnow() - u.invited_at).days >= ACADEMY_DAYS_LIMIT
-        )
-        no_date = (
-            div_id is not None
-            and div_id == DivisionId.AVNG
-            and u.invited_at is None
-        )
+        overdue = False
+        no_date = False
+
+        joined_date = u.transferred_at or (u.invited_at if div_id == DivisionId.AVNG else None)
+
+        if div_id == DivisionId.AVNG:
+            if joined_date is not None:
+                overdue = (discord.utils.utcnow() - joined_date).days >= ACADEMY_DAYS_LIMIT
+            else:
+                no_date = True
+        elif div_id == DivisionId.VBP:
+            if joined_date is not None:
+                overdue = (discord.utils.utcnow() - joined_date).days >= VBP_DAYS_LIMIT
+            else:
+                no_date = True
+
         return (
             f"{i}. {RANK_EMOJIS[u.rank or 0]} "
             f"`{format_static(u.static)}` "
@@ -59,12 +64,19 @@ class MembersBrowser(discord.ui.LayoutView):
         members = self.members
         if self.show_overdue_only:
             div_id = getattr(self.division_info, "division_id", None)
-            if div_id and div_id == DivisionId.AVNG:
-                members = [
-                    (i, u) for i, u in members
-                    if u.invited_at is None
-                    or (discord.utils.utcnow() - u.invited_at).days > ACADEMY_DAYS_LIMIT
-                ]
+            limit = None
+            if div_id == DivisionId.AVNG:
+                limit = ACADEMY_DAYS_LIMIT
+            elif div_id == DivisionId.VBP:
+                limit = VBP_DAYS_LIMIT
+
+            if limit is not None:
+                def is_overdue(u: User) -> bool:
+                    date = u.transferred_at or (u.invited_at if div_id == DivisionId.AVNG else None)
+                    return date is None or (discord.utils.utcnow() - date).days >= limit
+
+                members = [(i, u) for i, u in members if is_overdue(u)]
+
         if self.show_warning_only:
             members = [
                 (i, u) for i, u in members
@@ -89,10 +101,17 @@ class MembersBrowser(discord.ui.LayoutView):
         if not members_text:
             members_text = "Нет участников."
 
+        div_id = getattr(self.division_info, "division_id", None)
+        if div_id == DivisionId.AVNG:
+            hint = f"-# ⚠️ — не на сервере | ⏰ — просрочка в АВНГ ({ACADEMY_DAYS_LIMIT}+ дней) | ❓ — нет даты вступления"
+        elif div_id == DivisionId.VBP:
+            hint = f"-# ⚠️ — не на сервере | ⏰ — в ВБП более {VBP_DAYS_LIMIT} дней | ❓ — нет даты вступления"
+        else:
+            hint = "-# ⚠️ — не на сервере"
+
         container = discord.ui.Container()
         container.add_item(discord.ui.TextDisplay(header_text))
-        container.add_item(
-            discord.ui.TextDisplay("-# ⚠️ — не на сервере | ⏰ — просрочка в АВНГ (10+ дней) | ❓ — нет даты вступления"))
+        container.add_item(discord.ui.TextDisplay(hint))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(members_text))
         container.add_item(discord.ui.TextDisplay(f"Страница: `{self.current_page + 1}` из `{self.total_pages}`"))
@@ -116,8 +135,7 @@ class MembersBrowser(discord.ui.LayoutView):
         btn_next.callback = self.on_next
         action_row.add_item(btn_next)
 
-        div_id = getattr(self.division_info, "division_id", None)
-        if div_id and div_id == DivisionId.AVNG:
+        if div_id and div_id in (DivisionId.AVNG, DivisionId.VBP):
             btn_overdue = discord.ui.Button(
                 emoji="⏰",
                 style=discord.ButtonStyle.danger if self.show_overdue_only else discord.ButtonStyle.gray,

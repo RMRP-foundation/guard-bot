@@ -8,7 +8,7 @@ from services.authorization import AuthorizationService
 from services.dismissal import DismissalService
 from ui.embeds.dismissal import dismissal_embed
 from ui.modals.dismissal import DismissalModal
-from utils.helpers import safe_respond, build_mentions, safe_edit_message, safe_delete_message
+from utils.helpers import safe_respond, build_mentions, safe_edit_message, safe_delete_message, random_loading_message
 from utils.permissions import is_officer, has_disciplinary_restrictions, is_higher_rank
 
 logger = logging.getLogger(__name__)
@@ -94,6 +94,7 @@ class DismissalManagementButton(
         modal.add_item(reason_input)
 
         async def on_submit(modal_inter: discord.Interaction):
+            await modal_inter.response.defer()
             try:
                 result = await DismissalService.reject_dismissal(
                     interaction=modal_inter, request_id=self.request_id,
@@ -120,6 +121,8 @@ class DismissalManagementButton(
             if self.action == "reject":
                 await self._handle_reject_modal(interaction, officer)
                 return
+
+            await safe_respond(interaction, random_loading_message())
 
             result = await DismissalService.approve_dismissal(
                 interaction=interaction, request_id=self.request_id, officer_user_db=officer,

@@ -133,6 +133,8 @@ class UserEdit(commands.Cog):
         if not editor:
             return
 
+        await safe_respond(interaction, random_loading_message())
+
         if has_disciplinary_restrictions(user):
             await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями.")
             return

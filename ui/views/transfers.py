@@ -183,6 +183,7 @@ class RejectTransferButton(
         modal.add_item(reason_input)
 
         async def on_submit(modal_inter: discord.Interaction):
+            await modal_inter.response.defer()
             try:
                 result = await TransferService.reject_transfer(
                     interaction=modal_inter, request_id=self.request_id, officer=officer, reason=reason_input.value.strip(),

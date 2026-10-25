@@ -126,6 +126,7 @@ class ReinstatementManagementButton(
         modal.add_item(reason_input)
 
         async def on_submit(modal_inter: discord.Interaction):
+            await modal_inter.response.defer()
             try:
                 result = await ReinstatementService.reject_reinstatement(
                     interaction=modal_inter, request_id=self.request_id, officer=officer,

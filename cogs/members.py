@@ -11,6 +11,7 @@ from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex, DivisionId, 
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
+from services import presence
 from services.authorization import AuthorizationService
 from utils.helpers import safe_respond
 from utils.permissions import is_officer
@@ -54,7 +55,7 @@ class MembersBrowser(discord.ui.LayoutView):
         return (
             f"{i}. {RANK_EMOJIS[u.rank or 0]} "
             f"`{format_static(u.static)}` "
-            f"<@{u.discord_id}>{' ⚠️' if not self.guild.get_member(u.discord_id) else ''}{' ⏰' if overdue else ''}{' ❓' if no_date else ''} "
+            f"<@{u.discord_id}>{' ⚠️' if u.discord_id in presence.absent_ids else ''}{' ⏰' if overdue else ''}{' ❓' if no_date else ''} "
             f"❯ {u.full_name or 'Без имени'} "
             f"❯ {u.position or 'Без должности'}"
         )
@@ -80,7 +81,7 @@ class MembersBrowser(discord.ui.LayoutView):
         if self.show_warning_only:
             members = [
                 (i, u) for i, u in members
-                if not self.guild.get_member(u.discord_id)
+                if u.discord_id in presence.absent_ids
             ]
         return members
 

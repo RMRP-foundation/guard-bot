@@ -73,8 +73,8 @@ class MilitaryIdService:
             error_message="❌ Не удалось отправить заявку в канал. Попробуйте ещё раз.",
         )
 
-        from cogs.military_id import update_bottom_message
-        await update_bottom_message(interaction.client)
+        from services.bottom_messages import request_refresh
+        await request_refresh(interaction.client, config.CHANNELS["military_id"])
 
     @classmethod
     async def submit_military_id(

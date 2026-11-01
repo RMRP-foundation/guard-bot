@@ -107,8 +107,8 @@ class PatrolService:
             error_message="❌ Не удалось отправить заявление в канал. Попробуйте ещё раз.",
         )
 
-        from cogs.patrol import update_bottom_message
-        await update_bottom_message(interaction.client)
+        from services.bottom_messages import request_refresh
+        await request_refresh(interaction.client, config.CHANNELS["patrol"])
 
     @classmethod
     async def submit_patrol(

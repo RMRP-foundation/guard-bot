@@ -14,9 +14,7 @@ _DEBOUNCE_DELAY = 3.0  # секунды
 _pending_tasks: dict[int, asyncio.Task] = {}
 
 
-async def _execute_update(
-    bot, channel_id: int, view: discord.ui.View, embed: discord.Embed | None
-) -> None:
+async def _execute_update(bot, channel_id: int, view: discord.ui.View, embed: discord.Embed | None) -> bool:
     bottom_message = await BottomMessage.find_one(
         BottomMessage.channel_id == channel_id
     )
@@ -24,7 +22,7 @@ async def _execute_update(
     channel = bot.get_channel(channel_id)
     if not channel:
         logger.warning(f"Channel {channel_id} not found")
-        return
+        return False
 
     new_message = await channel.send(embed=embed, view=view)
 
@@ -46,7 +44,14 @@ async def _execute_update(
             channel_id=channel_id, message_id=new_message.id
         )
         await new_bottom_message.create()
+    return True
 
+async def update_bottom_message_now(bot, channel_id: int, view, embed: discord.Embed | None = None) -> bool:
+    """Без дебаунса, с ожиданием результата. Для админ-панели."""
+    pending = _pending_tasks.pop(channel_id, None)
+    if pending and not pending.done():
+        pending.cancel()
+    return await _execute_update(bot, channel_id, view, embed)
 
 async def update_bottom_message(
     bot, channel_id: int, view: ICLeaveApplyView | OOCLeaveApplyView, embed: discord.Embed | None = None

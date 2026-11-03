@@ -5,8 +5,7 @@ from typing import Callable
 import discord
 
 from core import config
-from core.config import RANKS, RoleId, DivisionId
-from core.constants import RankIndex
+from core.constants import RankIndex, DivisionId, RANKS
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -176,7 +175,7 @@ class ReinstatementService:
             await MemberService.sync_member_discord(member=member, user_db=target_user_db,
                                                     reason=f"Восстановление #{request.id}")
 
-            probation_role = member.guild.get_role(RoleId.PROBATION.value)
+            probation_role = member.guild.get_role(config.RoleId.PROBATION.value)
             if probation_role and probation_role not in member.roles:
                 try:
                     await member.add_roles(probation_role,

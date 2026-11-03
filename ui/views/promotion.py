@@ -1,6 +1,6 @@
 import discord
 
-from core import config
+from core import config, constants
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User, PromotionRequest
@@ -157,19 +157,19 @@ async def _promotion_apply_callback(interaction: discord.Interaction) -> None:
         if not div:
             raise ServiceError("❌ Канал повышений для данного подразделения не настроен.")
 
-        if (user_db.rank or 0) >= config.RankIndex.CAPTAIN:
+        if (user_db.rank or 0) >= constants.RankIndex.CAPTAIN:
             raise ServiceError("❌ Повышение через рапорт доступно только до звания Капитан.")
 
         if user_db.division != div.division_id:
             raise ServiceError("❌ Вы можете подавать рапорт только в своём подразделении.")
 
         target_rank = user_db.rank + 1
-        if target_rank >= config.RankIndex.JUNIOR_LIEUTENANT and not user_db.has_military_id:
+        if target_rank >= constants.RankIndex.JUNIOR_LIEUTENANT and not user_db.has_military_id:
             mil_channel_id = config.CHANNELS.get("military_id")
             channel_hint = f" в канале <#{mil_channel_id}>" if mil_channel_id else ""
             raise ServiceError(
                 f"### ❌ Отказано в подаче рапорта\n"
-                f"Для повышения до звания **{config.RANKS[target_rank]}** "
+                f"Для повышения до звания **{constants.RANKS[target_rank]}** "
                 f"необходим подтверждённый военный билет.\n"
                 f"Пожалуйста, сначала подтвердите военный билет{channel_hint}."
             )

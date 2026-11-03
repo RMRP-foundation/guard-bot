@@ -6,12 +6,12 @@ from typing import Callable
 import discord
 
 from core import constants, config
-from core.config import ROLE_REQUIRED_RANK_INDICES, DivisionId
-from core.constants import RANKS
+from core.rules import ROLE_REQUIRED_RANK_INDICES
+from core.constants import RANKS, DivisionId, RoleType
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
-from database.models import ExtendedRoleData, RoleData, RoleRequest, RoleType, User
+from database.models import ExtendedRoleData, RoleData, RoleRequest, User
 from database.status import RequestStatus
 from services.audit import AuditAction, audit_logger
 from services.member import MemberService

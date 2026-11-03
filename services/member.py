@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING
 import discord
 
 from core import config
-from core.config import EXCLUDED_ROLES, RoleId, DivisionId
+from core.config import EXCLUDED_ROLES, RoleId
+from core.constants import DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User

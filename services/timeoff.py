@@ -6,7 +6,7 @@ from typing import Callable
 import discord
 
 from core import config
-from core.config import RankIndex
+from core.constants import RANKS, RankIndex
 from core.exceptions import ServiceError
 from database.counters import get_next_id
 from database.models import RoleData, TimeoffRequest, User
@@ -50,7 +50,7 @@ class TimeoffService:
         """
         min_rank = RankIndex.JUNIOR_SERGEANT
         if (user_db.rank or 0) < min_rank:
-            raise ServiceError(f"### Вы не можете подать заявление на отгул. Требуется звание: {config.RANKS[min_rank]}+")
+            raise ServiceError(f"### Вы не можете подать заявление на отгул. Требуется звание: {RANKS[min_rank]}+")
 
         cutoff = cls._get_msk_day_start_utc()
 
@@ -74,7 +74,7 @@ class TimeoffService:
             ServiceError: Если звание ниже Майора, заявитель не найден, либо нарушена субординация.
         """
         if not is_senior_officer(officer):
-            raise ServiceError(f"❌ Для рассмотрения заявок на отгул требуется звание {config.RANKS[RankIndex.MAJOR]} и выше.")
+            raise ServiceError(f"❌ Для рассмотрения заявок на отгул требуется звание {RANKS[RankIndex.MAJOR]} и выше.")
 
         if not requester:
             raise ServiceError("❌ Заявитель не найден в базе данных.")

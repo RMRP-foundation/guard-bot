@@ -1,16 +1,11 @@
-import logging
 import os
-from enum import Enum, IntEnum
+from enum import Enum
 
 from dotenv import load_dotenv
 
-from core.constants import RANKS, RankIndex
-from database.schemas import RoleType, Privilege
-from utils.permissions import DivisionRule
+from core.constants import RANKS, DivisionId, RoleType
 
 load_dotenv()
-
-logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
@@ -19,6 +14,10 @@ if not TOKEN:
 ENVIRONMENT = os.getenv("ENVIRONMENT")
 if not ENVIRONMENT:
     raise Exception("ENVIRONMENT not set")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL not found")
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")
 
@@ -29,17 +28,6 @@ SERVICE_ACCOUNT_IDS: frozenset[int] = frozenset({
     531744307103662080,
     538662196297859082
 })
-
-
-class DivisionId(IntEnum):
-    VBP = 0
-    AVNG = 1
-    CPP = 2
-    USB = 3
-    OMON = 4
-    SOBR = 5
-    GENERAL_STAFF = 6
-
 
 if IS_PRODUCTION:
 
@@ -152,15 +140,6 @@ ROLE_DISPLAY_NAMES = {
         RoleType.ARMY: "ФСВНГ",
 }
 
-ROLE_REQUIRED_RANKS = {
-    RoleType.ARMY: "Младший лейтенант",
-}
-
-ROLE_REQUIRED_RANK_INDICES = {
-    RoleType.ARMY: RankIndex.JUNIOR_LIEUTENANT,
-}
-
-
 IC_MIN_DAYS = 1
 IC_MAX_DAYS = 5
 OOC_MIN_DAYS = 7
@@ -182,10 +161,6 @@ PENALTY_ROLES = (1245655611505508397, 1245655611505508396, 1245655611505508395, 
 ROLE_RESUBMIT_COOLDOWN_HOURS = 24
 PATROL_FAIL_COOLDOWN = 300
 
-DIVISION_EXTERNAL_GRANT_CEILING: dict[DivisionId, Privilege] = {
-    DivisionId.GENERAL_STAFF: Privilege.COMMANDER,
-}
-
 PROMOTION_SIMPLE_EVIDENCE_DIVISIONS = {DivisionId.AVNG, DivisionId.USB, DivisionId.CPP}
 PROMOTION_NOTIFY_ROLES: dict[int, tuple[int, ...]] = {
     DivisionId.AVNG: (1245655611568427045, 1245655611555971117, 1466027839202529352, 1245659712205361233),
@@ -193,33 +168,6 @@ PROMOTION_NOTIFY_ROLES: dict[int, tuple[int, ...]] = {
     DivisionId.USB: (1527952234422210681, 1527953170490462290),
     DivisionId.OMON: (1245655611568427048, 1245655611555971119, 1466029398997209130, 1245655611543257107),
     DivisionId.SOBR: (1410671556744450079, 1410674655978717314, 1466029855849185475, 1418672132333895740),
-}
-
-PROMOTION_RULES: dict[int, DivisionRule] = {
-    DivisionId.AVNG: DivisionRule(
-        review_rank=RankIndex.MAJOR,
-        promote_rank=RankIndex.MAJOR,
-        review_positions=("Инструктор", "Главный инструктор"),
-        reviewer_division_id=DivisionId.CPP,
-    ),
-    DivisionId.CPP: DivisionRule(
-        review_rank=RankIndex.MAJOR,
-        promote_rank=RankIndex.MAJOR,
-        review_positions=("Главный инструктор",),
-    ),
-    DivisionId.USB: DivisionRule(
-        review_rank=RankIndex.MAJOR,
-        promote_rank=RankIndex.MAJOR,
-    ),
-    DivisionId.OMON: DivisionRule(
-        review_rank=RankIndex.MAJOR,
-        promote_rank=RankIndex.MAJOR,
-    ),
-    DivisionId.SOBR: DivisionRule(
-        review_rank=RankIndex.MAJOR,
-        promote_rank=RankIndex.MAJOR,
-        review_positions=("Инструктор",),
-    ),
 }
 
 SUPPLY_INFO_LINK = "https://discord.com/channels/1245655611484541009/1348001487900381244/1561715491305689139"

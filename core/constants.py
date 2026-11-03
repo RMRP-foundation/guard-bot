@@ -1,5 +1,15 @@
 import re
+from enum import IntEnum, Enum
 
+
+class DivisionId(IntEnum):
+    VBP = 0
+    AVNG = 1
+    CPP = 2
+    USB = 3
+    OMON = 4
+    SOBR = 5
+    GENERAL_STAFF = 6
 
 class RankIndex:
     """Индексы званий для проверок прав доступа"""
@@ -150,3 +160,14 @@ LOADING_MESSAGES = [
     "🧫 Трансмутируем данные...",
     "🧷 Валидируем гипотезу...",
 ]
+
+
+class RoleType(str, Enum):
+    ARMY = "army"  # ВС РФ
+
+
+class Privilege(Enum):
+    COMMANDER = 4
+    DEPUTY_COMMANDER = 3
+    OFFICER = 2
+    DEFAULT = 1

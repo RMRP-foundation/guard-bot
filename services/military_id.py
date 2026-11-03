@@ -5,7 +5,7 @@ from typing import Callable
 import discord
 
 from core import config
-from core.config import RankIndex
+from core.constants import RankIndex, RANKS
 from core.exceptions import ServiceError
 from database.counters import get_next_id
 from database.models import MilitaryIdRequest, User
@@ -46,7 +46,7 @@ class MilitaryIdService:
             raise ServiceError("❌ Вы не можете проверять собственный военный билет.")
 
         if not is_senior_officer(officer):
-            raise ServiceError(f"❌ Проверять военный билет разрешено со звания {config.RANKS[RankIndex.MAJOR]}+.")
+            raise ServiceError(f"❌ Проверять военный билет разрешено со звания {RANKS[RankIndex.MAJOR]}+.")
 
     @staticmethod
     async def create_request(user_id: int, full_name: str, evidence: str) -> MilitaryIdRequest:

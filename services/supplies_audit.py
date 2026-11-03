@@ -3,7 +3,7 @@ import logging
 import discord
 
 from core import config
-from core.config import RankIndex
+from core.constants import RankIndex, RANKS
 from core.exceptions import ServiceError
 from database.models import User
 from ui.embeds.supplies_audit import clear_supply_embed, give_supply_embed
@@ -19,7 +19,7 @@ class SupplyAuditService:
     def validate_officer(user_db: User) -> None:
         """Проверяет, имеет ли пользователь ранг Майор+ для работы с аудитом склада."""
         if not is_senior_officer(user_db):
-            raise ServiceError(f"❌ Доступно со звания {config.RANKS[RankIndex.MAJOR]}.")
+            raise ServiceError(f"❌ Доступно со звания {RANKS[RankIndex.MAJOR]}.")
 
     @staticmethod
     def _parse_lines(raw: str, empty_error: str) -> list[str]:

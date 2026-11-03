@@ -1,4 +1,3 @@
-import datetime
 import logging
 import math
 
@@ -7,7 +6,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import Bot
-from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, RankIndex, DivisionId, VBP_DAYS_LIMIT
+from core.config import ACADEMY_DAYS_LIMIT, RANK_EMOJIS, VBP_DAYS_LIMIT
+from core.constants import DivisionId, RankIndex
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User

@@ -4,8 +4,7 @@ from typing import Callable
 
 import discord
 
-from core import config
-from core.config import RankIndex, DivisionId
+from core.constants import DivisionId, RankIndex, RANKS
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -77,7 +76,7 @@ class TransferService:
         if (user_db.rank or 0) < min_rank:
             raise ServiceError(
                 f"### ❌ Отказано в подаче\nВ подразделение **{destination.abbreviation}** "
-                f"можно вступить только со звания **{config.RANKS[min_rank]}** и выше."
+                f"можно вступить только со звания **{RANKS[min_rank]}** и выше."
             )
 
         if user_db.division == destination.division_id:

@@ -5,9 +5,8 @@ from typing import Iterable
 import discord
 from discord.utils import MISSING
 
-from core import config
-from core.config import DivisionId
-from core.constants import LOADING_MESSAGES
+from core import config, constants
+from core.constants import LOADING_MESSAGES, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
 
@@ -89,7 +88,7 @@ def build_officer_mentions(user_id: int, min_rank_index: int) -> str:
     """Спойлер с упоминанием автора и всего командного состава от указанного звания и выше."""
     officer_role_ids = [
         role_id for rank_name, role_id in config.RANK_ROLES.items()
-        if config.RANKS.index(rank_name) >= min_rank_index
+        if constants.RANKS.index(rank_name) >= min_rank_index
     ]
     return build_mentions(user_id, officer_role_ids)
 

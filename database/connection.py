@@ -1,15 +1,10 @@
 import logging
-import os
 
-from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Читаем env напрямую: core.config импортирует database.models, а тот тянет этот модуль (цикл).
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise Exception("DATABASE_URL not found")
+from core.config import DATABASE_URL
+
 
 engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 # expire_on_commit=False: объекты остаются читаемыми после закрытия сессии (аналог Beanie-документов)

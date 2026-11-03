@@ -5,7 +5,7 @@ from typing import Callable
 import discord
 
 from core import config
-from core.config import RankIndex, DivisionId
+from core.constants import DivisionId, RANKS, RankIndex
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -53,7 +53,7 @@ class PatrolService:
             raise ServiceError(
                 f"### ❌ Отказано в подаче\n"
                 f"Подать заявление на совместную работу с СОБР можно только со звания "
-                f"**{config.RANKS[min_rank]}** и выше."
+                f"**{RANKS[min_rank]}** и выше."
             )
 
         existing = await PatrolRequest.find_one(

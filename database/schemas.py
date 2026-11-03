@@ -5,12 +5,7 @@ from enum import Enum
 import discord
 from pydantic import BaseModel
 
-
-class Privilege(Enum):
-    COMMANDER = 4
-    DEPUTY_COMMANDER = 3
-    OFFICER = 2
-    DEFAULT = 1
+from core.constants import Privilege, RoleType  # noqa: F401
 
 
 class Position(BaseModel):
@@ -29,10 +24,6 @@ class Blacklist(BaseModel):
         if self.ends_at is None:
             return True
         return discord.utils.utcnow() < self.ends_at
-
-
-class RoleType(str, Enum):
-    ARMY = "army"  # ВС РФ
 
 
 class RoleData(BaseModel):

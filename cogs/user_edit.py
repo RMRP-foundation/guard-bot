@@ -3,9 +3,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import Bot
-from core import config
-from core.config import RANK_EMOJIS, RankIndex
-from core.constants import RANKS
+from core.config import RANK_EMOJIS
+from core.constants import RANKS, RankIndex
 from core.exceptions import ServiceError
 from database import divisions
 from database.models import User
@@ -118,7 +117,7 @@ class UserEdit(commands.Cog):
             await safe_respond(modal_interaction, f"✅ {user.mention} уволен.")
 
         confirm_modal.add_item(reason_input)
-        rank_name = config.RANKS[user_info.rank] if user_info.rank is not None else "Не указано"
+        rank_name = RANKS[user_info.rank] if user_info.rank is not None else "Не указано"
         confirm_modal.add_item(discord.ui.TextDisplay(f"-# Вы собираетесь уволить {user.display_name} со звания {rank_name}"))
         confirm_modal.on_submit = on_submit
         await interaction.response.send_modal(confirm_modal)
@@ -139,7 +138,7 @@ class UserEdit(commands.Cog):
             await safe_respond(interaction, "❌ Вы не можете повысить военнослужащего с активными дисциплинарными взысканиями.")
             return
 
-        if user_info.rank >= len(config.RANKS) - 1:
+        if user_info.rank >= len(RANKS) - 1:
             await safe_respond(interaction, f"⚠️ {user.mention} уже имеет максимальное звание!")
             return
 
@@ -151,13 +150,13 @@ class UserEdit(commands.Cog):
         if target_rank >= RankIndex.JUNIOR_LIEUTENANT and not user_info.has_military_id:
             await safe_respond(
                 interaction,
-                f"❌ Невозможно повысить до звания **{config.RANKS[target_rank]}**: "
+                f"❌ Невозможно повысить до звания **{RANKS[target_rank]}**: "
                 f"у военнослужащего отсутствует подтверждённый военный билет."
             )
             return
 
         user_info.rank = target_rank
-        rank_name = config.RANKS[user_info.rank]
+        rank_name = RANKS[user_info.rank]
         await user_info.save()
 
         await MemberService.sync_member_discord(member=user, user_db=user_info, reason=f"Повысил {interaction.user.display_name}")
@@ -251,7 +250,7 @@ class UserEdit(commands.Cog):
             if new_rank >= RankIndex.JUNIOR_LIEUTENANT and not user_info.has_military_id:
                 await safe_respond(
                     interaction,
-                    f"❌ Невозможно присвоить звание **{config.RANKS[new_rank]}**: "
+                    f"❌ Невозможно присвоить звание **{RANKS[new_rank]}**: "
                     f"у военнослужащего отсутствует подтверждённый военный билет."
                 )
                 await interaction.edit_original_response(view=self.build_view(user, user_info))
@@ -263,10 +262,10 @@ class UserEdit(commands.Cog):
             if old_rank != new_rank:
                 if old_rank < new_rank:
                     audit_action = AuditAction.PROMOTED
-                    notification = notify_promoted(interaction.client, user.id, config.RANKS[new_rank])
+                    notification = notify_promoted(interaction.client, user.id, RANKS[new_rank])
                 else:
                     audit_action = AuditAction.DEMOTED
-                    notification = notify_demoted(interaction.client, user.id, config.RANKS[new_rank])
+                    notification = notify_demoted(interaction.client, user.id, RANKS[new_rank])
 
             await self._finalize_change(
                 interaction, user, user_info, reason=f"Изменение звания {interaction.user.display_name}",

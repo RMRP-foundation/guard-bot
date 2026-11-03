@@ -9,9 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, NO_VALUE
 from core import constants
 from database.base import Doc, PydanticJSON
 from database.schemas import (  # noqa: F401
-    Blacklist, DismissalType, ExtendedRoleData, LeaveType, Position, Privilege,
-    ReinstatementData, RoleData, RoleType,
-)
+    Blacklist, DismissalType, ExtendedRoleData, LeaveType, Position, ReinstatementData, RoleData, )
+from core.constants import RoleType, Privilege
 from database.status import RequestStatus
 
 BigInt = BigInteger
@@ -89,7 +88,7 @@ class User(Doc):
     def discord_nick(self) -> str:
         from database import divisions
         from utils.user_data import transliterate_abbreviation
-        from core.config import DivisionId
+        from core.constants import DivisionId
 
         parts = []
         if self.leave_status:

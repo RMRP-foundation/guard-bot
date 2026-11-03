@@ -4,8 +4,8 @@ from typing import Callable
 
 import discord
 
-from core import config
-from core.config import RankIndex, DivisionId
+from core import config, rules
+from core.constants import DivisionId, RANKS, RankIndex
 from core.exceptions import ServiceError
 from database import divisions
 from database.counters import get_next_id
@@ -46,10 +46,10 @@ class PromotionService:
             return
 
         if (approver.rank or 0) <= report.target_rank:
-            needed = config.RANKS[report.target_rank + 1] if (report.target_rank + 1) < len(config.RANKS) else "выше"
+            needed = RANKS[report.target_rank + 1] if (report.target_rank + 1) < len(RANKS) else "выше"
             raise ServiceError(f"❌ Для проверки этого рапорта требуется звание {needed}+.")
 
-        rule = config.PROMOTION_RULES.get(div.division_id)
+        rule = rules.PROMOTION_RULES.get(div.division_id)
         if not rule:
             raise ServiceError(f"❌ Правила повышения для {div.abbreviation} не настроены.")
 
@@ -72,7 +72,7 @@ class PromotionService:
         if is_high_command(promoter):
             return
 
-        rule = config.PROMOTION_RULES.get(div.division_id)
+        rule = rules.PROMOTION_RULES.get(div.division_id)
         if not rule:
             raise ServiceError(f"❌ Правила повышения для {div.abbreviation} не настроены.")
 
@@ -249,13 +249,13 @@ class PromotionService:
 
         if target_user_db.rank != req.current_rank:
             raise ServiceError(
-                f"❌ Рапорт неактуален: звание бойца изменилось на **{config.RANKS[target_user_db.rank]}** "
-                f"(рапорт подавался со звания **{config.RANKS[req.current_rank]}**)."
+                f"❌ Рапорт неактуален: звание бойца изменилось на **{RANKS[target_user_db.rank]}** "
+                f"(рапорт подавался со звания **{RANKS[req.current_rank]}**)."
             )
 
         if req.target_rank >= RankIndex.JUNIOR_LIEUTENANT and not target_user_db.has_military_id:
             raise ServiceError(
-                f"❌ Невозможно повысить до звания **{config.RANKS[req.target_rank]}** "
+                f"❌ Невозможно повысить до звания **{RANKS[req.target_rank]}** "
                 f"без подтверждённого военного билета."
             )
 
@@ -280,7 +280,7 @@ class PromotionService:
             )
 
         await audit_logger.log_action(action=AuditAction.PROMOTED, initiator=interaction.user, target=request.user_id)
-        await notify_promoted(interaction.client, request.user_id, config.RANKS[request.target_rank])
+        await notify_promoted(interaction.client, request.user_id, RANKS[request.target_rank])
 
         from ui.views.indicators import indicator_view
         return PromotionActionResult(

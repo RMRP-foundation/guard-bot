@@ -10,6 +10,7 @@ from core.config import IC_MAX_DAYS, OOC_MAX_DAYS, OOC_MIN_DAYS, IC_MIN_DAYS
 from core.exceptions import ServiceError
 from database.counters import get_next_id
 from database.models import User, LeaveType, LeaveRequest
+from database.status import RequestStatus
 from services.member import MemberService
 from services.notifications import notify_leave_rejected, notify_leave_approved, notify_leave_cancelled
 from ui.embeds.leave import leave_embed
@@ -52,10 +53,10 @@ class LeaveService:
         """
         user_requests = await LeaveRequest.find(
             LeaveRequest.user_id == user_db.discord_id,
-            LeaveRequest.status != "REJECTED",
+            LeaveRequest.status != RequestStatus.REJECTED,
         ).to_list()
 
-        pending_req = next((req for req in user_requests if req.status == "PENDING"), None)
+        pending_req = next((req for req in user_requests if req.status == RequestStatus.PENDING), None)
         if pending_req:
             raise ServiceError(f"❌ Ваше предыдущее заявление #{pending_req.id} еще находится на рассмотрении.")
 
@@ -173,7 +174,7 @@ class LeaveService:
                 либо боец больше не состоит на службе.
         """
         req = await LeaveRequest.find_one(LeaveRequest.id == request_id)
-        if not req or req.status != "PENDING":
+        if not req or req.status != RequestStatus.PENDING:
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
 
         await cls._validate_reviewer_permissions(officer, req.user_id)
@@ -181,7 +182,7 @@ class LeaveService:
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db or target_user_db.rank is None:
             await atomic_status_transition(
-                LeaveRequest, request_id, "PENDING", "REJECTED",
+                LeaveRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
                 extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
             )
             raise ServiceError("❌ Пользователь не состоит на службе.")
@@ -190,7 +191,7 @@ class LeaveService:
         member = await interaction.client.getch_member(req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest, request_id, "PENDING", "APPROVED",
+            LeaveRequest, request_id, RequestStatus.PENDING, RequestStatus.APPROVED,
             extra_fields={
                 "reviewer_id": interaction.user.id,
                 "approved_at": now,
@@ -224,7 +225,7 @@ class LeaveService:
         return LeaveActionResult(
             request=request,
             embed=leave_embed(request, target_user_db),
-            view=LeaveManagementView(request.id, status="APPROVED"),
+            view=LeaveManagementView(request.id, status=RequestStatus.APPROVED),
             message=result_msg,
         )
 
@@ -236,13 +237,13 @@ class LeaveService:
             ServiceError: Если заявление не найдено, уже обработано, либо нарушена субординация.
         """
         req = await LeaveRequest.find_one(LeaveRequest.id == request_id)
-        if not req or req.status != "PENDING":
+        if not req or req.status != RequestStatus.PENDING:
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
 
         await cls._validate_reviewer_permissions(officer, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest, request_id, "PENDING", "REJECTED",
+            LeaveRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -270,7 +271,7 @@ class LeaveService:
             ServiceError: Если заявление не найдено, не одобрено, либо нарушена субординация.
         """
         req = await LeaveRequest.find_one(LeaveRequest.id == request_id)
-        if not req or req.status != "APPROVED":
+        if not req or req.status != RequestStatus.APPROVED:
             raise ServiceError(f"❌ Заявление #{request_id} не найдено или не одобрено.")
 
         is_own = interaction.user.id == req.user_id
@@ -278,7 +279,7 @@ class LeaveService:
             await cls._validate_reviewer_permissions(initiator, req.user_id)
 
         updated_dict = await atomic_status_transition(
-            LeaveRequest, request_id, "APPROVED", "ANNULLED",
+            LeaveRequest, request_id, RequestStatus.APPROVED, RequestStatus.ANNULLED,
             extra_fields={"annuller_id": interaction.user.id, "annulled_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -319,7 +320,7 @@ class LeaveService:
             ServiceError: Если заявление уже обработано офицером или не найдено.
         """
         updated_dict = await atomic_status_transition(
-            LeaveRequest, request_id, "PENDING", "REJECTED",
+            LeaveRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"annuller_id": user_id, "annulled_at": discord.utils.utcnow()},
             extra_filter={"user_id": user_id},
         )

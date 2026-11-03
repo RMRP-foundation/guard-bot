@@ -73,7 +73,6 @@ def build_request_mentions(
         user_id: int,
         user_division_id: int | None = None,
         min_privilege: int = 2,
-        fallback_abbr: str = "ВК",
         fallback_id: int = DivisionId.CPP,
 ) -> str:
     """Автор + руководящие должности его подразделения (или резервного, если позиций нет)."""

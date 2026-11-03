@@ -3,6 +3,7 @@ import discord
 
 from core.exceptions import ServiceError
 from database.models import MilitaryIdRequest, User
+from database.status import RequestStatus
 from services.authorization import AuthorizationService
 from services.military_id import MilitaryIdService
 from ui.modals.military_id import MilitaryIdModal
@@ -79,7 +80,7 @@ class MilitaryIdManagementButton(
 
     async def _handle_reject_modal(self, interaction: discord.Interaction, officer: User) -> None:
         req = await MilitaryIdRequest.find_one(MilitaryIdRequest.id == self.request_id)
-        if not req or req.status != "PENDING":
+        if not req or req.status != RequestStatus.PENDING:
             await safe_respond(interaction, f"❌ Заявка #{self.request_id} не найдена или уже обработана.")
             return
 

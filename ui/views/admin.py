@@ -108,7 +108,6 @@ class AdminPanel(discord.ui.LayoutView):
         container.add_item(_row(
             _button("Ресинк команд", "🔄", self.on_resync),
             _button("Добавить бойца", "➕", self.on_add_member_open),
-            _button("Присутствие", "👥", self.on_presence),
             _button("Кэш подразделений", "♻️", self.on_reload_divisions),
             _button("Логи", "📄", self.on_logs),
         ))
@@ -304,16 +303,6 @@ class AdminPanel(discord.ui.LayoutView):
             self.bot.tree.copy_global_to(guild=guild)
             synced = await self.bot.tree.sync(guild=guild)
             return f"Слэш-команды синхронизированы: {len(synced)}"
-
-        await self._system(interaction, action)
-
-    async def on_presence(self, interaction: discord.Interaction):
-        async def action() -> str:
-            result = await presence.check(self.bot)
-            text = f"Проверено: {result.checked} · отсутствуют на сервере: {len(result.absent)}"
-            if result.absent:
-                text += "\n" + "\n".join(f"<@{discord_id}>" for discord_id in sorted(result.absent)[:15])
-            return text
 
         await self._system(interaction, action)
 

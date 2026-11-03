@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import defaultdict
 
 import discord
 
@@ -12,9 +13,14 @@ _DEBOUNCE_DELAY = 3.0  # секунды
 
 # channel_id -> pending asyncio.Task
 _pending_tasks: dict[int, asyncio.Task] = {}
+_locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
-async def _execute_update(bot, channel_id: int, view: discord.ui.View, embed: discord.Embed | None) -> bool:
+async def _execute_update(bot, channel_id, view, embed) -> bool:
+    async with _locks[channel_id]:
+        return await _do_update(bot, channel_id, view, embed)
+
+async def _do_update(bot, channel_id: int, view: discord.ui.View, embed: discord.Embed | None) -> bool:
     bottom_message = await BottomMessage.find_one(
         BottomMessage.channel_id == channel_id
     )
@@ -70,7 +76,7 @@ async def update_bottom_message(
     async def _run() -> None:
         try:
             await asyncio.sleep(_DEBOUNCE_DELAY)
-            await _execute_update(bot, channel_id, view, embed)
+            await asyncio.shield(_execute_update(bot, channel_id, view, embed))
         except asyncio.CancelledError:
             pass
         except Exception as e:

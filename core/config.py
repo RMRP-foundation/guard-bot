@@ -5,7 +5,7 @@ from enum import Enum, IntEnum
 from dotenv import load_dotenv
 
 from core.constants import RANKS, RankIndex
-from database.models import RoleType, Privilege
+from database.schemas import RoleType, Privilege
 from utils.permissions import DivisionRule
 
 load_dotenv()

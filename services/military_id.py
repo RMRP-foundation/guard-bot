@@ -9,6 +9,7 @@ from core.config import RankIndex
 from core.exceptions import ServiceError
 from database.counters import get_next_id
 from database.models import MilitaryIdRequest, User
+from database.status import RequestStatus
 from services.notifications import notify_military_id_approved, notify_military_id_rejected
 from ui.embeds.military_id import military_id_embed
 from utils.helpers import safe_publish_request, build_officer_mentions
@@ -33,7 +34,7 @@ class MilitaryIdService:
         """Проверяет, нет ли уже активной заявки на рассмотрении."""
         existing = await MilitaryIdRequest.find_one(
             MilitaryIdRequest.user_id == user_db.discord_id,
-            MilitaryIdRequest.status == "PENDING",
+            MilitaryIdRequest.status == RequestStatus.PENDING,
         )
         if existing:
             raise ServiceError(f"❌ У вас уже есть активная заявка #{existing.id} на рассмотрении.")
@@ -55,7 +56,7 @@ class MilitaryIdService:
             user_id=user_id,
             full_name=full_name,
             evidence=evidence,
-            status="PENDING",
+            status=RequestStatus.PENDING,
         )
         await request.create()
         return request
@@ -88,7 +89,7 @@ class MilitaryIdService:
     @classmethod
     async def approve_military_id(cls, interaction: discord.Interaction, request_id: int, officer: User) -> MilitaryIdActionResult:
         req = await MilitaryIdRequest.find_one(MilitaryIdRequest.id == request_id)
-        if not req or req.status != "PENDING":
+        if not req or req.status != RequestStatus.PENDING:
             raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
 
         cls.validate_reviewer_permissions(officer, req.user_id)
@@ -96,8 +97,8 @@ class MilitaryIdService:
         updated_dict = await atomic_status_transition(
             MilitaryIdRequest,
             request_id,
-            "PENDING",
-            "APPROVED",
+            RequestStatus.PENDING,
+            RequestStatus.APPROVED,
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
         if not updated_dict:
@@ -134,7 +135,7 @@ class MilitaryIdService:
         cls, interaction: discord.Interaction, request_id: int, officer: User, reason: str,
     ) -> MilitaryIdActionResult:
         req = await MilitaryIdRequest.find_one(MilitaryIdRequest.id == request_id)
-        if not req or req.status != "PENDING":
+        if not req or req.status != RequestStatus.PENDING:
             raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
 
         cls.validate_reviewer_permissions(officer, req.user_id)
@@ -142,8 +143,8 @@ class MilitaryIdService:
         updated_dict = await atomic_status_transition(
             MilitaryIdRequest,
             request_id,
-            "PENDING",
-            "REJECTED",
+            RequestStatus.PENDING,
+            RequestStatus.REJECTED,
             extra_fields={
                 "reviewer_id": interaction.user.id,
                 "reviewed_at": discord.utils.utcnow(),

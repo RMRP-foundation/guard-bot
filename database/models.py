@@ -295,6 +295,13 @@ class MilitaryIdRequest(Doc):
     reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
 
+class Setting(Doc):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True, autoincrement=False)
+    value: Mapped[str] = mapped_column(String)
+
+
 class BottomMessage(Doc):
     __tablename__ = "bottom_messages"
 

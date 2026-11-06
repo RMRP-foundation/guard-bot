@@ -21,7 +21,7 @@ async def establish_db_connection():
 
     async with engine.begin() as conn:
         await conn.execute(
-            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS transferred_at TIMESTAMP WITH TIME ZONE;")
+            text("CREATE TABLE IF NOT EXISTS settings (key VARCHAR PRIMARY KEY, value TEXT NOT NULL);")
         )
 
     async with engine.connect():

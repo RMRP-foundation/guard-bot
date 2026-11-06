@@ -6,11 +6,12 @@ from pathlib import Path
 import discord
 
 from bot import Bot
+from core import config
 from core.config import GUILD_ID
 from database import divisions
 from database.models import Division, User
 from services import admin_db, bottom_messages, presence
-from ui.modals.admin import AddMemberModal, DossierModal, EditFieldModal, SearchModal, guard
+from ui.modals.admin import AddMemberModal, DossierModal, EditFieldModal, SearchModal, guard, SupplyLinkModal
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ class AdminPanel(discord.ui.LayoutView):
             container.add_item(_text("Реестр пуст."))
 
         container.add_item(_row(
+            _button("Ссылка склада", "🔗", self.on_supply_link_open),  # <--- Кнопка
             _button("Обновить все", "📌", self.on_refresh_all, discord.ButtonStyle.primary),
             _button("Назад", "⬅️", self.on_home),
         ))
@@ -252,6 +254,37 @@ class AdminPanel(discord.ui.LayoutView):
             _button("Отмена", "✖️", self.on_cancel_delete),
         ))
         self._show(container)
+
+    async def on_supply_link_open(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SupplyLinkModal(self))
+
+    async def update_supply_link(self, interaction: discord.Interaction, new_url: str):
+        """Сохраняет ссылку в БД, меняет её в config и обновляет сообщение склада."""
+        try:
+            from database.models import Setting
+
+            setting = await Setting.find_one(Setting.key == "supply_info_link")
+            if setting:
+                setting.value = new_url
+                await setting.save()
+            else:
+                await Setting(key="supply_info_link", value=new_url).create()
+
+            config.SUPPLY_INFO_LINK = new_url
+
+            # Сразу обновляем сообщение в канале склада
+            channel_id = config.CHANNELS.get("storage_requests")
+            target = bottom_messages.get_targets().get(channel_id)
+            if target:
+                await bottom_messages.refresh_now(self.bot, target)
+
+            status = f"✅ Ссылка на склад обновлена:\n{new_url}"
+        except Exception as error:
+            logger.exception("Failed to update supply link")
+            status = f"❌ Ошибка обновления: {error}"
+
+        self.interfaces(status)
+        await self._push(interaction)
 
     # -- навигация --
 

@@ -106,7 +106,7 @@ class MembersBrowser(discord.ui.LayoutView):
         if div_id == DivisionId.AVNG:
             hint = f"-# ⚠️ — не на сервере | ⏰ — просрочка в АВНГ ({ACADEMY_DAYS_LIMIT}+ дней) | ❓ — нет даты вступления"
         elif div_id == DivisionId.VBP:
-            hint = f"-# ⚠️ — не на сервере | ⏰ — в ВБП более {VBP_DAYS_LIMIT} дней | ❓ — нет даты вступления"
+            hint = f"-# ⚠️ — не на сервере | ⏰ — в ВБП ({VBP_DAYS_LIMIT}+ дней) | ❓ — нет даты вступления"
         else:
             hint = "-# ⚠️ — не на сервере"
 

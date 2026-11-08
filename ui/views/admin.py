@@ -141,7 +141,7 @@ class AdminPanel(discord.ui.LayoutView):
             container.add_item(_text("Реестр пуст."))
 
         container.add_item(_row(
-            _button("Ссылка склада", "🔗", self.on_supply_link_open),  # <--- Кнопка
+            _button("Ссылка склада", "🔗", self.on_supply_link_open),
             _button("Обновить все", "📌", self.on_refresh_all, discord.ButtonStyle.primary),
             _button("Назад", "⬅️", self.on_home),
         ))
@@ -272,7 +272,6 @@ class AdminPanel(discord.ui.LayoutView):
 
             config.SUPPLY_INFO_LINK = new_url
 
-            # Сразу обновляем сообщение в канале склада
             channel_id = config.CHANNELS.get("storage_requests")
             target = bottom_messages.get_targets().get(channel_id)
             if target:

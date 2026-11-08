@@ -269,6 +269,8 @@ class PromotionService:
         request = PromotionRequest(**updated_dict)
 
         new_division = target_user_db.division
+
+        # NOTE: Guard-specific rule, don't carry over to other projects.
         if div.division_id == DivisionId.AVNG and request.target_rank == RankIndex.SERGEANT:
             new_division = DivisionId.VBP
 

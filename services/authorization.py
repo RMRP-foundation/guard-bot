@@ -29,14 +29,14 @@ class AuthorizationService:
         if user is None:
             raise ServiceError("❌ Вы не состоите на службе.")
 
-        if user.pre_inited and user.static is None:
-            from ui.modals.profile_input import StaticInputModal
-            await interaction.response.send_modal(StaticInputModal())
-            raise ModalInputRequired()
+        missing_static = user.pre_inited and user.static is None
+        missing_name = user.pre_inited and (not user.first_name or not user.last_name)
 
-        if user.pre_inited and (not user.first_name or not user.last_name):
-            from ui.modals.profile_input import NameInputModal
-            await interaction.response.send_modal(NameInputModal())
+        if missing_static or missing_name:
+            from ui.modals.profile_input import ProfileInputModal
+            await interaction.response.send_modal(
+                ProfileInputModal(need_name=missing_name, need_static=missing_static)
+            )
             raise ModalInputRequired()
 
         return user

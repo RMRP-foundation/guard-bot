@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.constants import Privilege, RoleType, RankIndex, DivisionId
+from core.constants import Privilege, RoleType, RankIndex, DivisionId, RANKS
 
 if TYPE_CHECKING:
     from database.models import User
@@ -61,11 +61,10 @@ PROMOTION_RULES: dict[int, DivisionRule] = {
 DIVISION_EXTERNAL_GRANT_CEILING: dict[DivisionId, Privilege] = {
     DivisionId.GENERAL_STAFF: Privilege.COMMANDER,
 }
-
-ROLE_REQUIRED_RANKS = {
-    RoleType.ARMY: "Младший лейтенант",
-}
-
 ROLE_REQUIRED_RANK_INDICES = {
     RoleType.ARMY: RankIndex.JUNIOR_LIEUTENANT,
+}
+ROLE_REQUIRED_RANKS: dict[RoleType, str] = {
+    role_type: RANKS[rank_index]
+    for role_type, rank_index in ROLE_REQUIRED_RANK_INDICES.items()
 }

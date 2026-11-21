@@ -294,6 +294,19 @@ class MilitaryIdRequest(Doc):
     created_at: Mapped[datetime.datetime] = _now()
     reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
 
+    
+class CallsignRequest(Doc):
+    __tablename__ = "callsign_requests"
+
+    id: Mapped[int] = _pk()
+    user_id: Mapped[int] = mapped_column(BigInt)
+    full_name: Mapped[str] = mapped_column(String)
+    callsign: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default=RequestStatus.PENDING)
+    reviewer_id: Mapped[int | None] = mapped_column(BigInt, default=None)
+    created_at: Mapped[datetime.datetime] = _now()
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(TZ, default=None)
+
 
 class Setting(Doc):
     __tablename__ = "settings"

@@ -23,6 +23,8 @@ async def establish_db_connection():
         await conn.execute(
             text("CREATE TABLE IF NOT EXISTS settings (key VARCHAR PRIMARY KEY, value TEXT NOT NULL);")
         )
+        from database.models import CallsignRequest
+        await conn.run_sync(CallsignRequest.__table__.create, checkfirst=True)
 
     async with engine.connect():
         pass

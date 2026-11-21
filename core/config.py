@@ -115,6 +115,8 @@ CHANNELS = (
         "ic_leave": 1400905921990758431,
         "ooc_leave": 1347529377482670100,
         "military_id": 1561120220662210722,
+        "callsign_omon": 1292248552298254369,
+        "callsign_sobr": 1411652070305697812,
     }
     if IS_PRODUCTION
     else {
@@ -132,6 +134,8 @@ CHANNELS = (
         "ic_leave": 1490255233345912913,
         "ooc_leave": 1490255253918974114,
         "military_id": 1561053612598366398,
+        "callsign_omon": 1573774273951039601,
+        "callsign_sobr": 1573774236995293194,
     }
 )
 

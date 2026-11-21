@@ -28,6 +28,7 @@ from .transfers import (
     TransferApplyButton,
     CancelTransferButton,
 )
+from .callsign import CallsignApplyView, CallsignManagementButton
 
 
 def load_persistent_views(bot):
@@ -43,6 +44,7 @@ def load_persistent_views(bot):
     bot.add_view(OOCLeaveApplyView())
     bot.add_view(PromotionApplyView())
     bot.add_view(MilitaryIdApplyView())
+    bot.add_view(CallsignApplyView())
 
 def load_buttons(bot):
     bot.add_dynamic_items(
@@ -64,5 +66,6 @@ def load_buttons(bot):
         PromotionManagementButton,
         PromoteButton,
         MilitaryIdManagementButton,
+        CallsignManagementButton,
     )
     load_persistent_views(bot)

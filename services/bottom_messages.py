@@ -101,6 +101,11 @@ def _transfer(division) -> Build:
     return build
 
 
+def _callsign():
+    from ui.views.callsign import CallsignApplyView
+    return CallsignApplyView(), None
+
+
 # ключ config.CHANNELS -> (подпись, фабрика)
 _STATIC: dict[str, tuple[str, Build]] = {
     "dismissal": ("Увольнения", _dismissal),
@@ -114,6 +119,8 @@ _STATIC: dict[str, tuple[str, Build]] = {
     "reinstatement": ("Восстановление", _reinstatement),
     "ic_leave": ("IC отпуск", _ic_leave),
     "ooc_leave": ("OOC отпуск", _ooc_leave),
+    "callsign_omon": ("Позывные · ОМОН", _callsign),
+    "callsign_sobr": ("Позывные · СОБР", _callsign),
 }
 
 

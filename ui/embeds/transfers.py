@@ -17,14 +17,17 @@ def transfer_embed(request: TransferRequest, user: User) -> discord.Embed:
     new_abbr = new_div.abbreviation if new_div else "Нет"
 
     if request.status == RequestStatus.OLD_DIVISION_REVIEW:
-        context = f" в {old_abbr}"
+        target = f" в {new_abbr}"
+        stage_context = f" в {old_abbr}"
     elif request.status == RequestStatus.NEW_DIVISION_REVIEW:
-        context = f" в {new_abbr}"
+        target = f" в {new_abbr}"
+        stage_context = ""
     else:
-        context = ""
+        target = ""
+        stage_context = ""
 
     embed = discord.Embed(
-        title = f"{status_display.emoji} Рапорт{context} #{request.id} — {status_display.text}",
+        title=f"{status_display.emoji} Рапорт{target} #{request.id} — {status_display.text}{stage_context}",
         color=status_display.color,
         timestamp=request.created_at,
     )

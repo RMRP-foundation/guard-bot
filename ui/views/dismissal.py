@@ -107,8 +107,9 @@ class DismissalManagementButton(
 
             await modal_inter.edit_original_response(
                 content=build_mentions([result.request.user_id, modal_inter.user.id]),
-                embed=result.embed, view=None,
+                embed=result.embed, view=result.view,
             )
+            await modal_inter.followup.send(result.message, ephemeral=True)
 
         modal.on_submit = on_submit
         await interaction.response.send_modal(modal)
@@ -132,19 +133,11 @@ class DismissalManagementButton(
                 message=interaction.message,
                 content=build_mentions([result.request.user_id, interaction.user.id]),
                 embed=result.embed,
-                view=None,
+                view=result.view,
             )
-            await safe_respond(interaction, "✅ Рапорт одобрен, сотрудник уволен.")
+            await safe_respond(interaction, result.message)
 
         except ServiceError as error:
-            req = await DismissalRequest.find_one(DismissalRequest.id == self.request_id)
-            if req and req.status != RequestStatus.PENDING:
-                await safe_edit_message(
-                    message = interaction.message,
-                    content = build_mentions([req.user_id, interaction.user.id]),
-                    embed = dismissal_embed(req),
-                    view = None,
-                )
             await safe_respond(interaction, error.message)
 
 

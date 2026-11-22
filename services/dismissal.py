@@ -27,6 +27,7 @@ class DismissalActionResult:
     """Результат approve/reject: данные для отрисовки, без единого discord-вызова внутри сервиса."""
     request: DismissalRequest
     embed: discord.Embed
+    message: str
     view: discord.ui.View | None = None
 
 
@@ -91,13 +92,7 @@ class DismissalService:
         )
 
     @staticmethod
-    async def _validate_approval_prerequisites(request_id: int, officer_user_db: User) -> tuple[DismissalRequest, User]:
-        """Проверяет статус заявки, наличие целевого бойца в БД и субординацию.
-
-        Raises:
-            ServiceError: Если заявка не найдена/не PENDING, боец не найден,
-                уже уволен, либо нарушена субординация.
-        """
+    async def _get_request_and_target(request_id: int) -> tuple[DismissalRequest, User]:
         req = await DismissalRequest.find_one(DismissalRequest.id == request_id)
         if not req or req.status != RequestStatus.PENDING:
             raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
@@ -106,17 +101,19 @@ class DismissalService:
         if not target_user_db:
             raise ServiceError("❌ Пользователь не найден в БД.")
 
-        if target_user_db.rank is None:
-            await atomic_status_transition(
-                DismissalRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
-                extra_fields={"reviewer_id": officer_user_db.discord_id, "reviewed_at": discord.utils.utcnow()},
-            )
-            raise ServiceError("❌ Сотрудник уже уволен. Рапорт отклонён.")
-
-        if not is_higher_rank(officer_user_db, target_user_db):
-            raise ServiceError("❌ Вы не можете обрабатывать рапорт военнослужащего равного или старшего звания.")
-
         return req, target_user_db
+
+    @classmethod
+    async def _reject_already_dismissed(cls, request_id: int, reviewer_id: int) -> DismissalActionResult:
+        request = await cls._apply_atomic_status_change(
+            request_id, RequestStatus.REJECTED, reviewer_id,
+            reject_reason="Сотрудник уже уволен.",
+        )
+        return DismissalActionResult(
+            request=request,
+            embed=dismissal_embed(request),
+            message="❌ Сотрудник уже уволен. Рапорт отклонён.",
+        )
 
     @staticmethod
     async def _apply_atomic_status_change(
@@ -191,32 +188,34 @@ class DismissalService:
         return penalty_applied
 
     @classmethod
-    async def approve_dismissal(cls, interaction: discord.Interaction, request_id: int, officer_user_db: User) -> DismissalActionResult:
-        """Одобряет рапорт на увольнение: субординация, атомарный переход статуса, побочные эффекты.
+    async def approve_dismissal(cls, interaction: discord.Interaction, request_id: int,
+                                officer_user_db: User) -> DismissalActionResult:
+        _, target_user_db = await cls._get_request_and_target(request_id)
+        if target_user_db.rank is None:
+            return await cls._reject_already_dismissed(request_id, officer_user_db.discord_id)
+        if not is_higher_rank(officer_user_db, target_user_db):
+            raise ServiceError("❌ Вы не можете обрабатывать рапорт военнослужащего равного или старшего звания.")
 
-        Raises:
-            ServiceError: Если нарушена субординация либо рапорт уже обработан.
-        """
-        _, target_user_db = await cls._validate_approval_prerequisites(request_id, officer_user_db)
         request = await cls._apply_atomic_status_change(request_id, RequestStatus.APPROVED, interaction.user.id)
-
         penalty_applied = await cls._execute_dismissal(interaction, request, target_user_db, officer_user_db)
 
         embed = dismissal_embed(request)
         if penalty_applied:
             embed.set_footer(text="Автоматически выдан ЧС за неустойку.")
-        return DismissalActionResult(request=request, embed=embed)
+        return DismissalActionResult(request=request, embed=embed, message="✅ Рапорт одобрен, сотрудник уволен.")
 
     @classmethod
-    async def reject_dismissal(cls, interaction: discord.Interaction, request_id: int, officer_user_db: User, reason: str) -> DismissalActionResult:
-        """Отклоняет рапорт на увольнение с указанием причины.
+    async def reject_dismissal(cls, interaction: discord.Interaction, request_id: int, officer_user_db: User,
+                               reason: str) -> DismissalActionResult:
+        _, target_user_db = await cls._get_request_and_target(request_id)
+        if target_user_db.rank is None:
+            return await cls._reject_already_dismissed(request_id, officer_user_db.discord_id)
+        if not is_higher_rank(officer_user_db, target_user_db):
+            raise ServiceError("❌ Вы не можете обрабатывать рапорт военнослужащего равного или старшего звания.")
 
-        Raises:
-            ServiceError: Если нарушена субординация либо рапорт уже обработан.
-        """
-        await cls._validate_approval_prerequisites(request_id, officer_user_db)
-        request = await cls._apply_atomic_status_change(request_id, RequestStatus.REJECTED, interaction.user.id, reject_reason=reason)
-        return DismissalActionResult(request=request, embed=dismissal_embed(request))
+        request = await cls._apply_atomic_status_change(request_id, RequestStatus.REJECTED, interaction.user.id,
+                                                        reject_reason=reason)
+        return DismissalActionResult(request=request, embed=dismissal_embed(request), message="✅ Рапорт отклонён.")
 
     @staticmethod
     async def cancel_dismissal(interaction: discord.Interaction, request_id: int) -> None:

@@ -4,12 +4,11 @@ import discord
 
 from core.exceptions import ServiceError
 from database.models import DismissalType, User, DismissalRequest
-from database.status import RequestStatus
 from services.authorization import AuthorizationService
 from services.dismissal import DismissalService
-from ui.embeds.dismissal import dismissal_embed
 from ui.modals.dismissal import DismissalModal
-from utils.helpers import safe_respond, build_mentions, safe_edit_message, safe_delete_message, random_loading_message
+from ui.modals.reason import ReasonModal
+from utils.helpers import safe_respond, build_mentions, safe_edit_message, safe_delete_message, random_loading_message, require_request
 from utils.permissions import is_officer, has_disciplinary_restrictions, is_higher_rank
 
 logger = logging.getLogger(__name__)
@@ -78,28 +77,20 @@ class DismissalManagementButton(
         return cls(match.group("action"), int(match.group("id")))
 
     async def _handle_reject_modal(self, interaction: discord.Interaction, officer: User) -> None:
-        req = await DismissalRequest.find_one(DismissalRequest.id == self.request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            await safe_respond(interaction, f"❌ Рапорт #{self.request_id} не найден или уже обработан.")
-            return
-
+        req = await require_request(
+            DismissalRequest, self.request_id,
+            error_message=f"❌ Рапорт #{self.request_id} не найден или уже обработан.",
+        )
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db or not is_higher_rank(officer, target_user_db):
-            await safe_respond(interaction, "❌ Вы не можете обрабатывать рапорт равного или старшего звания.")
-            return
+            raise ServiceError("❌ Вы не можете обрабатывать рапорт равного или старшего звания.")
 
-        modal = discord.ui.Modal(title="Отклонение рапорта на увольнение")
-        reason_input = discord.ui.TextInput(
-            label="Причина отказа", style=discord.TextStyle.paragraph, required=True, max_length=500,
-        )
-        modal.add_item(reason_input)
-
-        async def on_submit(modal_inter: discord.Interaction):
+        async def on_submit(modal_inter: discord.Interaction, reason: str):
             await modal_inter.response.defer()
             try:
                 result = await DismissalService.reject_dismissal(
                     interaction=modal_inter, request_id=self.request_id,
-                    officer_user_db=officer, reason=reason_input.value.strip(),
+                    officer_user_db=officer, reason=reason,
                 )
             except ServiceError as error:
                 await modal_inter.followup.send(error.message, ephemeral=True)
@@ -111,8 +102,9 @@ class DismissalManagementButton(
             )
             await modal_inter.followup.send(result.message, ephemeral=True)
 
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(
+            ReasonModal("Отклонение рапорта на увольнение", on_submit, label="Причина отказа")
+        )
 
     async def callback(self, interaction: discord.Interaction):
         try:

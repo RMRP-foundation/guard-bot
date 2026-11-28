@@ -15,8 +15,8 @@ from services.audit import AuditAction, audit_logger
 from services.member import MemberService
 from services.notifications import notify_promoted, notify_promotion_approved, notify_promotion_rejected
 from ui.embeds.promotion import promotion_embed
-from utils.helpers import safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import safe_publish_request, build_mentions, require_request, require_no_active_request
+from utils.atomic import atomic_status_transition, atomic_transition
 from utils.permissions import has_disciplinary_restrictions, is_high_command
 
 logger = logging.getLogger(__name__)
@@ -94,9 +94,10 @@ class PromotionService:
             ServiceError: Если рапорт не найден, статус не входит в allowed_statuses,
                 либо подразделение рапорта не найдено.
         """
-        req = await PromotionRequest.find_one(PromotionRequest.id == request_id)
-        if not req or req.status not in allowed_statuses:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
+        req = await require_request(
+            PromotionRequest, request_id, statuses=allowed_statuses,
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
+        )
 
         div = divisions.get_division(req.division_id)
         if not div:
@@ -144,12 +145,10 @@ class PromotionService:
         Raises:
             ServiceError: Если у бойца уже есть активный рапорт.
         """
-        existing = await PromotionRequest.find_one(
-            PromotionRequest.user_id == interaction.user.id,
-            PromotionRequest.status.in_([RequestStatus.PENDING, RequestStatus.APPROVED]),
+        await require_no_active_request(
+            PromotionRequest, interaction.user.id,
+            statuses=(RequestStatus.PENDING, RequestStatus.APPROVED),
         )
-        if existing:
-            raise ServiceError(f"❌ У вас уже есть активный рапорт #{existing.id}.")
 
         request = await cls.create_request(
             user_id=interaction.user.id, user_db=user_db, division_id=division.division_id,
@@ -171,14 +170,12 @@ class PromotionService:
         req, div = await cls._get_request_and_division(request_id, (RequestStatus.PENDING,))
         cls.validate_can_review(approver, div, req)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             PromotionRequest, request_id, RequestStatus.PENDING, RequestStatus.APPROVED,
             extra_fields={"reviewer_id": interaction.user.id},
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
 
-        request = PromotionRequest(**updated_dict)
         target_user = await User.get_by_discord_id(request.user_id)
         await notify_promotion_approved(interaction.client, request.user_id)
 
@@ -202,14 +199,12 @@ class PromotionService:
         req, div = await cls._get_request_and_division(request_id, (RequestStatus.PENDING, RequestStatus.APPROVED))
         cls.validate_can_review(reviewer, div, req)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             PromotionRequest, request_id, [RequestStatus.PENDING, RequestStatus.APPROVED], RequestStatus.REJECTED,
             extra_fields={"reviewer_id": interaction.user.id, "reject_reason": reason},
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
 
-        request = PromotionRequest(**updated_dict)
         target_user = await User.get_by_discord_id(request.user_id)
         await notify_promotion_rejected(interaction.client, request.user_id, reason)
 
@@ -259,14 +254,11 @@ class PromotionService:
                 f"без подтверждённого военного билета."
             )
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             PromotionRequest, request_id, RequestStatus.APPROVED, RequestStatus.PROMOTED,
             extra_fields={"promoted_by": interaction.user.id},
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
-
-        request = PromotionRequest(**updated_dict)
 
         new_division = target_user_db.division
 
@@ -300,10 +292,9 @@ class PromotionService:
         Raises:
             ServiceError: Если рапорт не найден или уже обработан.
         """
-        updated_dict = await atomic_status_transition(
+        await atomic_transition(
             PromotionRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reject_reason": "Отменено автором"},
             extra_filter={"user_id": user_id},
+            error_message="❌ Рапорт не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Рапорт не найден или уже обработан.")

@@ -16,8 +16,8 @@ from services.member import MemberService
 from services.notifications import notify_reinstatement_approved, notify_reinstatement_rejected, \
     notify_reinstatement_attestation
 from ui.embeds.reinstatement import reinstatement_embed
-from utils.helpers import safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import safe_publish_request, build_mentions, require_no_active_request, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -56,12 +56,12 @@ class ReinstatementService:
     @staticmethod
     async def validate_no_active_request(user_id: int) -> None:
         """Проверяет, что у пользователя нет заявления в статусе PENDING или ATTESTATION."""
-        opened_request = await ReinstatementRequest.find_one(
-            ReinstatementRequest.user == user_id,
-            ReinstatementRequest.status.in_([RequestStatus.PENDING, RequestStatus.ATTESTATION]),
+        await require_no_active_request(
+            ReinstatementRequest, user_id,
+            statuses=(RequestStatus.PENDING, RequestStatus.ATTESTATION),
+            user_field="user",
+            error_message="### У вас уже есть открытое заявление на рассмотрении.\nОжидайте его рассмотрения.",
         )
-        if opened_request is not None:
-            raise ServiceError("### У вас уже есть открытое заявление на рассмотрении.\nОжидайте его рассмотрения.")
 
     @staticmethod
     async def create_request(user_id: int, full_name: str, all_documents: str, certificate: str) -> ReinstatementRequest:
@@ -111,19 +111,17 @@ class ReinstatementService:
     async def start_attestation(cls, interaction: discord.Interaction, request_id: int,
                                 officer: User) -> ReinstatementActionResult:
         """Переводит заявку в статус переаттестации (ATTESTATION). Никаких ролей не выдает."""
-        req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
-
+        req = await require_request(
+            ReinstatementRequest, request_id,
+            error_message=f"❌ Заявление #{request_id} не найдено или уже обработано.",
+        )
         cls.validate_reviewer_permissions(officer, req.user)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             ReinstatementRequest, request_id, RequestStatus.PENDING, RequestStatus.ATTESTATION,
+            error_message=f"❌ Заявление #{request_id} уже обработано.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
 
-        request = ReinstatementRequest(**updated_dict)
         await notify_reinstatement_attestation(interaction.client, request.user)
 
         target_user_db = await User.get_by_discord_id(request.user)
@@ -139,9 +137,10 @@ class ReinstatementService:
     async def approve_reinstatement(cls, interaction: discord.Interaction, request_id: int, rank_index: int,
                                     officer: User) -> ReinstatementActionResult:
         """Окончательно одобряет восстановление с присвоением звания и выдачей испытательного срока."""
-        req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
-        if not req or req.status != RequestStatus.ATTESTATION:
-            raise ServiceError(f"❌ Заявление #{request_id} не найдено или не на этапе переаттестации.")
+        req = await require_request(
+            ReinstatementRequest, request_id, statuses=RequestStatus.ATTESTATION,
+            error_message=f"❌ Заявление #{request_id} не найдено или не на этапе переаттестации.",
+        )
 
         cls.validate_reviewer_permissions(officer, req.user)
 
@@ -152,14 +151,11 @@ class ReinstatementService:
                 f"у кандидата отсутствует подтверждённый военный билет."
             )
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             ReinstatementRequest, request_id, RequestStatus.ATTESTATION, RequestStatus.APPROVED,
             extra_fields={"rank": rank_index},
+            error_message=f"❌ Заявление #{request_id} уже обработано.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
-
-        request = ReinstatementRequest(**updated_dict)
 
         if not target_user_db:
             target_user_db = User(discord_id=request.user, pre_inited=True)
@@ -197,20 +193,20 @@ class ReinstatementService:
     async def reject_reinstatement(cls, interaction: discord.Interaction, request_id: int, officer: User,
                                    reason: str) -> ReinstatementActionResult:
         """Отклоняет заявление на восстановление."""
-        req = await ReinstatementRequest.find_one(ReinstatementRequest.id == request_id)
-        if not req or req.status not in (RequestStatus.PENDING, RequestStatus.ATTESTATION):
-            raise ServiceError(f"❌ Заявление #{request_id} не найдено или уже обработано.")
-
+        req = await require_request(
+            ReinstatementRequest, request_id,
+            statuses=(RequestStatus.PENDING, RequestStatus.ATTESTATION),
+            error_message=f"❌ Заявление #{request_id} не найдено или уже обработано.",
+        )
         cls.validate_reviewer_permissions(officer, req.user)
 
-        updated_dict = await atomic_status_transition(
-            ReinstatementRequest, request_id, [RequestStatus.PENDING, RequestStatus.ATTESTATION], RequestStatus.REJECTED,
+        request = await atomic_transition(
+            ReinstatementRequest, request_id,
+            [RequestStatus.PENDING, RequestStatus.ATTESTATION], RequestStatus.REJECTED,
             extra_fields={"reject_reason": reason},
+            error_message=f"❌ Заявление #{request_id} уже обработано.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявление #{request_id} уже обработано.")
 
-        request = ReinstatementRequest(**updated_dict)
         target_user_db = await User.get_by_discord_id(request.user)
         await notify_reinstatement_rejected(interaction.client, request.user, reason=reason)
 

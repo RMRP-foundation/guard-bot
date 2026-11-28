@@ -17,8 +17,8 @@ from services.audit import AuditAction, audit_logger
 from services.member import MemberService
 from services.notifications import notify_role_approved, notify_role_rejected
 from ui.embeds.role_getting import role_embed
-from utils.helpers import safe_edit_message, safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import safe_edit_message, safe_publish_request, build_mentions, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import check_rank_silent
 from utils.user_data import set_name_if_changed
 
@@ -74,11 +74,10 @@ class RoleService:
         Raises:
             ServiceError: Если заявка уже обработана параллельно.
         """
-        updated_dict = await atomic_status_transition(
+        await atomic_transition(
             RoleRequest, request.id, RequestStatus.PENDING, RequestStatus.REJECTED,
+            error_message=f"### ⏳ Заявка #{request.id} уже подана\nПодождите завершения.",
         )
-        if not updated_dict:
-            raise ServiceError(f"### ⏳ Заявка #{request.id} уже подана\nПодождите завершения.")
 
         if request.message_id and channel:
             request.status = RequestStatus.REJECTED
@@ -200,20 +199,14 @@ class RoleService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана, либо нарушены права доступа.
         """
-        req = await RoleRequest.find_one(RoleRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
-
+        req = await require_request(RoleRequest, request_id)
         cls._validate_reviewer_permissions(officer, req.role_type, req.user)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             RoleRequest, request_id, RequestStatus.PENDING, RequestStatus.APPROVED,
             extra_fields={"reviewer_id": interaction.user.id, "sent_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = RoleRequest(**updated_dict)
         await cls._handle_military_role_approval(interaction, request)
 
         role_label = config.ROLE_DISPLAY_NAMES.get(request.role_type, "Роль")
@@ -234,20 +227,14 @@ class RoleService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана, либо нарушены права доступа.
         """
-        req = await RoleRequest.find_one(RoleRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
-
+        req = await require_request(RoleRequest, request_id)
         cls._validate_reviewer_permissions(officer, req.role_type, req.user)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             RoleRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reviewer_id": interaction.user.id, "sent_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = RoleRequest(**updated_dict)
         role_label = config.ROLE_DISPLAY_NAMES.get(request.role_type, "Роль")
         await notify_role_rejected(interaction.client, request.user, role_label)
 

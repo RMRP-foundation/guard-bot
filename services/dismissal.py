@@ -14,8 +14,8 @@ from services.member import MemberService
 from services.notifications import notify_dismissed, notify_blacklisted
 from ui.embeds.dismissal import dismissal_embed
 from utils.dismissal_logic import check_and_apply_penalty, cleanup_user_leaves
-from utils.helpers import build_request_mentions, safe_publish_request
-from utils.atomic import atomic_status_transition
+from utils.helpers import build_request_mentions, safe_publish_request, require_no_active_request, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import is_higher_rank
 from utils.user_data import set_name_if_changed
 
@@ -35,13 +35,7 @@ class DismissalService:
 
     @staticmethod
     async def validate_no_active_request(user_id: int) -> None:
-        """Проверяет, что у пользователя нет активного рапорта на увольнение."""
-        existing = await DismissalRequest.find_one(
-            DismissalRequest.user_id == user_id,
-            DismissalRequest.status == RequestStatus.PENDING,
-        )
-        if existing:
-            raise ServiceError(f"❌ У вас уже есть активный рапорт #{existing.id}.")
+        await require_no_active_request(DismissalRequest, user_id)
 
     @staticmethod
     async def create_request(user: User, full_name: str, dismissal_type: DismissalType) -> DismissalRequest:
@@ -93,9 +87,10 @@ class DismissalService:
 
     @staticmethod
     async def _get_request_and_target(request_id: int) -> tuple[DismissalRequest, User]:
-        req = await DismissalRequest.find_one(DismissalRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
+        req = await require_request(
+            DismissalRequest, request_id,
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
+        )
 
         target_user_db = await User.get_by_discord_id(req.user_id)
         if not target_user_db:
@@ -124,12 +119,11 @@ class DismissalService:
         if reject_reason is not None:
             extra_fields["reject_reason"] = reject_reason
 
-        updated_dict = await atomic_status_transition(
-            DismissalRequest, request_id, RequestStatus.PENDING, new_status, extra_fields=extra_fields,
+        return await atomic_transition(
+            DismissalRequest, request_id, RequestStatus.PENDING, new_status,
+            extra_fields=extra_fields,
+            error_message=f"❌ Рапорт #{request_id} не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Рапорт #{request_id} не найден или уже обработан.")
-        return DismissalRequest(**updated_dict)
 
     @classmethod
     async def _execute_dismissal(
@@ -224,10 +218,9 @@ class DismissalService:
         Raises:
             ServiceError: Если рапорт не найден или уже обработан.
         """
-        updated_dict = await atomic_status_transition(
+        await atomic_transition(
             DismissalRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reviewed_at": discord.utils.utcnow()},
             extra_filter={"user_id": interaction.user.id},
+            error_message="❌ Рапорт не найден или уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Рапорт не найден или уже обработан.")

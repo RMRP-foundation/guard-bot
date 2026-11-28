@@ -9,7 +9,8 @@ from services.authorization import AuthorizationService
 from services.promotion import PromotionService
 from texts import promotion_description, promotion_title
 from ui.modals.promotion import PromotionRequestModal
-from utils.helpers import safe_respond, safe_edit_message, random_loading_message, build_mentions, safe_delete_message
+from ui.modals.reason import ReasonModal
+from utils.helpers import safe_respond, safe_edit_message, random_loading_message, build_mentions, safe_delete_message, require_request
 
 
 class PromotionManagementButton(
@@ -40,35 +41,23 @@ class PromotionManagementButton(
         return cls(match.group("action"), int(match.group("id")))
 
     async def _handle_reject_modal(self, interaction: discord.Interaction, officer: User) -> None:
-        req = await PromotionRequest.find_one(PromotionRequest.id == self.report_id)
-        if not req or req.status not in (RequestStatus.PENDING, RequestStatus.APPROVED):
-            await safe_respond(interaction, f"❌ Рапорт #{self.report_id} не найден или уже обработан.")
-            return
-
+        req = await require_request(
+            PromotionRequest, self.report_id,
+            statuses=(RequestStatus.PENDING, RequestStatus.APPROVED),
+            error_message=f"❌ Рапорт #{self.report_id} не найден или уже обработан.",
+        )
         div = divisions.get_division(req.division_id)
         if not div:
-            await safe_respond(interaction, "❌ Подразделение рапорта не найдено.")
-            return
+            raise ServiceError("❌ Подразделение рапорта не найдено.")
 
-        try:
-            PromotionService.validate_can_review(officer, div, req)
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)
-            return
+        PromotionService.validate_can_review(officer, div, req)
 
-        modal = discord.ui.Modal(title="Отклонение рапорта на повышение")
-        reason_input = discord.ui.TextInput(
-            label="Причина отклонения", style=discord.TextStyle.paragraph,
-            placeholder="Введите причину отклонения", required=True, max_length=500,
-        )
-        modal.add_item(reason_input)
-
-        async def on_submit(modal_inter: discord.Interaction):
+        async def on_submit(modal_inter: discord.Interaction, reason: str):
             await modal_inter.response.defer(ephemeral=True)
             try:
                 result = await PromotionService.reject_promotion(
                     interaction=modal_inter, request_id=self.report_id, reviewer=officer,
-                    reason=reason_input.value.strip(),
+                    reason=reason,
                 )
             except ServiceError as error:
                 await safe_respond(modal_inter, error.message)
@@ -78,8 +67,9 @@ class PromotionManagementButton(
                 content=build_mentions(result.mention_ids), embed=result.embed, view=result.view,
             )
 
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(
+            ReasonModal("Отклонение рапорта на повышение", on_submit, placeholder="Введите причину отклонения")
+        )
 
     async def callback(self, interaction: discord.Interaction):
         try:

@@ -12,8 +12,8 @@ from database.counters import get_next_id
 from database.models import PatrolRequest, User
 from database.status import RequestStatus
 from ui.embeds.patrol import patrol_embed
-from utils.helpers import safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import safe_publish_request, build_mentions, require_no_active_request, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -56,11 +56,10 @@ class PatrolService:
                 f"**{RANKS[min_rank]}** и выше."
             )
 
-        existing = await PatrolRequest.find_one(
-            PatrolRequest.user_id == user_db.discord_id, PatrolRequest.status == RequestStatus.PENDING,
+        await require_no_active_request(
+            PatrolRequest, user_db.discord_id,
+            error_message="### У вас уже есть активная заявка на рассмотрении.",
         )
-        if existing:
-            raise ServiceError(f"### У вас уже есть активная заявка #{existing.id} на рассмотрении.")
 
         last_fail = (
             await PatrolRequest.find(
@@ -141,21 +140,19 @@ class PatrolService:
         Raises:
             ServiceError: Если заявление не найдено/уже обработано, либо нарушены права доступа.
         """
-        req = await PatrolRequest.find_one(PatrolRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"### ❌ Заявление #{request_id} не найдено или уже обработано.")
-
+        req = await require_request(
+            PatrolRequest, request_id,
+            error_message=f"### ❌ Заявление #{request_id} не найдено или уже обработано.",
+        )
         cls._validate_reviewer_permissions(officer, req.user_id)
 
         target_status, status_text, emoji = STATUS_TEXT[action]
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             PatrolRequest, request_id, RequestStatus.PENDING, target_status,
             extra_fields={"reviewer_id": interaction.user.id},
+            error_message=f"### ❌ Заявление #{request_id} уже обработано.",
         )
-        if not updated_dict:
-            raise ServiceError(f"### ❌ Заявление #{request_id} уже обработано.")
 
-        request = PatrolRequest(**updated_dict)
         target_user_db = await User.get_by_discord_id(request.user_id) or User(discord_id=request.user_id, pre_inited=True)
 
         from ui.views.indicators import indicator_view

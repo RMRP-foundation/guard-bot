@@ -15,8 +15,8 @@ from database.models import SupplyRequest, User
 from database.status import RequestStatus
 from ui.embeds.supplies import supplies_embed
 from ui.embeds.supplies_audit import supply_issuance_embed
-from utils.helpers import safe_edit_message, safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import safe_edit_message, safe_publish_request, build_mentions, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import has_penalty_roles, is_senior_officer
 
 logger = logging.getLogger(__name__)
@@ -157,14 +157,12 @@ class SupplyService:
         cls.validate_limits(items)
         cls._check_supply_cooldown(user_db.last_supply_at)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             SupplyRequest, request.id, RequestStatus.DRAFT, RequestStatus.PENDING,
             extra_fields={"items": items, "created_at": discord.utils.utcnow()},
+            error_message="❌ Заявка уже отправлена.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Заявка уже отправлена.")
 
-        request = SupplyRequest(**updated_dict)
         await cls.publish_request(interaction=interaction, request=request, user_db=user_db, view=view_factory(request.id))
 
     @classmethod
@@ -176,13 +174,12 @@ class SupplyService:
         """
         cls.validate_limits(items)
 
-        updated_dict = await atomic_status_transition(
-            SupplyRequest, request.id, RequestStatus.PENDING, RequestStatus.PENDING, extra_fields={"items": items},
+        fresh = await atomic_transition(
+            SupplyRequest, request.id, RequestStatus.PENDING, RequestStatus.PENDING,
+            extra_fields={"items": items},
+            error_message="❌ Заявка уже обработана другим офицером.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Заявка уже обработана другим офицером.")
 
-        fresh = SupplyRequest(**updated_dict)
         target_user = await User.get_by_discord_id(fresh.user_id)
 
         if fresh.message_id:
@@ -197,9 +194,7 @@ class SupplyService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана, заявитель не найден, либо действует КД.
         """
-        req = await SupplyRequest.find_one(SupplyRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
+        req = await require_request(SupplyRequest, request_id)
 
         cls._validate_reviewer_permissions(officer)
 
@@ -210,14 +205,12 @@ class SupplyService:
         cls._check_supply_cooldown(target_user.last_supply_at, subject="У пользователя")
 
         now = discord.utils.utcnow()
-        updated_dict = await atomic_status_transition(
+
+        request = await atomic_transition(
             SupplyRequest, request_id, RequestStatus.PENDING, RequestStatus.APPROVED,
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": now},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = SupplyRequest(**updated_dict)
         target_user.last_supply_at = now
         await target_user.save()
 
@@ -263,20 +256,14 @@ class SupplyService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана.
         """
-        req = await SupplyRequest.find_one(SupplyRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
-
+        req = await require_request(SupplyRequest, request_id)
         cls._validate_reviewer_permissions(officer)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             SupplyRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = SupplyRequest(**updated_dict)
         target_user = await User.get_by_discord_id(request.user_id)
 
         return SupplyActionResult(

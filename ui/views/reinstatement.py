@@ -8,8 +8,9 @@ from database.models import User, ReinstatementRequest
 from database.status import RequestStatus
 from services.authorization import AuthorizationService
 from services.reinstatement import ReinstatementService
+from ui.modals.reason import ReasonModal
 from ui.modals.reinstatement import ReinstatementModal
-from utils.helpers import safe_respond, random_loading_message, safe_edit_message, build_mentions
+from utils.helpers import safe_respond, random_loading_message, safe_edit_message, build_mentions, require_request
 
 
 async def _open_reinstatement_modal(interaction: discord.Interaction) -> None:
@@ -108,39 +109,28 @@ class ReinstatementManagementButton(
         return cls(match.group("action"), int(match.group("id")))
 
     async def _handle_reject_modal(self, interaction: discord.Interaction, officer: User) -> None:
-        req = await ReinstatementRequest.find_one(ReinstatementRequest.id == self.request_id)
-        if not req or req.status not in (RequestStatus.PENDING, RequestStatus.ATTESTATION):
-            await safe_respond(interaction, f"❌ Заявление #{self.request_id} не найдено или уже обработано.")
-            return
-
-        try:
-            ReinstatementService.validate_reviewer_permissions(officer, req.user)
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)
-            return
-
-        modal = discord.ui.Modal(title="Отклонение заявления")
-        reason_input = discord.ui.TextInput(
-            label="Причина отклонения", style=discord.TextStyle.paragraph,
-            placeholder="Введите причину отказа...", required=True, max_length=500,
+        req = await require_request(
+            ReinstatementRequest, self.request_id,
+            statuses=(RequestStatus.PENDING, RequestStatus.ATTESTATION),
         )
-        modal.add_item(reason_input)
+        ReinstatementService.validate_reviewer_permissions(officer, req.user)
 
-        async def on_submit(modal_inter: discord.Interaction):
+        async def on_submit(modal_inter: discord.Interaction, reason: str):
             await modal_inter.response.defer()
             try:
                 result = await ReinstatementService.reject_reinstatement(
                     interaction=modal_inter, request_id=self.request_id, officer=officer,
-                    reason=reason_input.value.strip(),
+                    reason=reason,
                 )
             except ServiceError as error:
                 await modal_inter.followup.send(error.message, ephemeral=True)
                 return
 
-            await modal_inter.response.edit_message(embed=result.embed, view=result.view)
+            await modal_inter.edit_original_response(embed=result.embed, view=result.view)
 
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(
+            ReasonModal("Отклонение заявления", on_submit, placeholder="Введите причину отказа...")
+        )
 
     async def callback(self, interaction: discord.Interaction):
         try:

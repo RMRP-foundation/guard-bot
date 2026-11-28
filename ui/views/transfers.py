@@ -4,12 +4,13 @@ import discord
 
 from core.exceptions import ServiceError
 from database import divisions
-from database.models import Division, TransferRequest, User
+from database.models import Division, TransferRequest
 from database.status import RequestStatus
 from services.authorization import AuthorizationService
 from services.transfers import TransferService
+from ui.modals.reason import ReasonModal
 from ui.modals.transfers import TransferModal
-from utils.helpers import safe_respond, safe_edit_message, random_loading_message, safe_delete_message
+from utils.helpers import safe_respond, safe_edit_message, random_loading_message, safe_delete_message, require_request
 
 
 class TransferApplyView(discord.ui.LayoutView):
@@ -159,16 +160,11 @@ class RejectTransferButton(
     async def callback(self, interaction: discord.Interaction):
         try:
             officer = await AuthorizationService.require_active_soldier(interaction)
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)
-            return
-
-        req = await TransferRequest.find_one(TransferRequest.id == self.request_id)
-        if not req or req.status not in (RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW):
-            await safe_respond(interaction, f"❌ Запрос #{self.request_id} не найден или уже обработан.")
-            return
-
-        try:
+            req = await require_request(
+                TransferRequest, self.request_id,
+                statuses=(RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW),
+                error_message=f"❌ Запрос #{self.request_id} не найден или уже обработан.",
+            )
             TransferService.validate_reviewer_permissions(
                 officer, [req.old_division_id, req.new_division_id], "❌ У вас нет прав отклонять данное заявление.",
             )
@@ -176,18 +172,11 @@ class RejectTransferButton(
             await safe_respond(interaction, error.message)
             return
 
-        modal = discord.ui.Modal(title="Отклонение заявления на перевод")
-        reason_input = discord.ui.TextInput(
-            label="Причина отклонения", style=discord.TextStyle.paragraph,
-            placeholder="Введите причину отклонения заявления", required=True, max_length=500,
-        )
-        modal.add_item(reason_input)
-
-        async def on_submit(modal_inter: discord.Interaction):
+        async def on_submit(modal_inter: discord.Interaction, reason: str):
             await modal_inter.response.defer()
             try:
                 result = await TransferService.reject_transfer(
-                    interaction=modal_inter, request_id=self.request_id, officer=officer, reason=reason_input.value.strip(),
+                    interaction=modal_inter, request_id=self.request_id, officer=officer, reason=reason,
                 )
             except ServiceError as error:
                 await modal_inter.followup.send(error.message, ephemeral=True)
@@ -195,8 +184,9 @@ class RejectTransferButton(
 
             await modal_inter.edit_original_response(embed=result.embed, view=result.view)
 
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(
+            ReasonModal("Отклонение заявления на перевод", on_submit, placeholder="Введите причину отклонения заявления")
+        )
 
 
 class CancelTransferButton(

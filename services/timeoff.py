@@ -13,8 +13,8 @@ from database.models import RoleData, TimeoffRequest, User
 from database.status import RequestStatus
 from services.notifications import notify_timeoff_approved, notify_timeoff_rejected
 from ui.embeds.timeoff import timeoff_embed
-from utils.helpers import build_request_mentions, safe_publish_request
-from utils.atomic import atomic_status_transition
+from utils.helpers import build_request_mentions, safe_publish_request, require_request
+from utils.atomic import atomic_transition
 from utils.permissions import is_senior_officer, is_higher_rank
 
 logger = logging.getLogger(__name__)
@@ -126,21 +126,15 @@ class TimeoffService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана, либо нарушены права доступа.
         """
-        req = await TimeoffRequest.find_one(TimeoffRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
-
+        req = await require_request(TimeoffRequest, request_id)
         target_user = await User.get_by_discord_id(req.user_id)
         cls._validate_reviewer_permissions(officer, target_user)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             TimeoffRequest, request_id, RequestStatus.PENDING, RequestStatus.APPROVED,
             extra_fields={"reviewed_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = TimeoffRequest(**updated_dict)
         await notify_timeoff_approved(interaction.client, request.user_id)
 
         from ui.views.indicators import indicator_view
@@ -158,21 +152,15 @@ class TimeoffService:
         Raises:
             ServiceError: Если заявка не найдена/уже обработана, либо нарушены права доступа.
         """
-        req = await TimeoffRequest.find_one(TimeoffRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
-
+        req = await require_request(TimeoffRequest, request_id)
         target_user = await User.get_by_discord_id(req.user_id)
         cls._validate_reviewer_permissions(officer, target_user)
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             TimeoffRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
             extra_fields={"reviewed_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
 
-        request = TimeoffRequest(**updated_dict)
         await notify_timeoff_rejected(interaction.client, request.user_id)
 
         from ui.views.indicators import indicator_view
@@ -190,9 +178,9 @@ class TimeoffService:
         Raises:
             ServiceError: Если заявка не найдена или уже обработана офицером.
         """
-        updated_dict = await atomic_status_transition(
+        await atomic_transition(
             TimeoffRequest, request_id, RequestStatus.PENDING, RequestStatus.REJECTED,
-            extra_fields={"reviewed_at": discord.utils.utcnow()}, extra_filter={"user_id": user_id},
+            extra_fields={"reviewed_at": discord.utils.utcnow()},
+            extra_filter={"user_id": user_id},
+            error_message="❌ Заявка не найдена или уже обработана офицером.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Заявка не найдена или уже обработана офицером.")

@@ -11,8 +11,8 @@ from database.counters import get_next_id
 from database.models import CallsignRequest, User
 from database.status import RequestStatus
 from ui.embeds.callsign import callsign_embed
-from utils.atomic import atomic_status_transition
-from utils.helpers import build_request_mentions, safe_publish_request
+from utils.atomic import atomic_transition
+from utils.helpers import build_request_mentions, safe_publish_request, require_no_active_request, require_request
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -84,12 +84,7 @@ class CallsignService:
 
     @staticmethod
     async def validate_can_apply(user_db: User) -> None:
-        existing = await CallsignRequest.find_one(
-            CallsignRequest.user_id == user_db.discord_id,
-            CallsignRequest.status == RequestStatus.PENDING,
-        )
-        if existing:
-            raise ServiceError(f"❌ У вас уже есть активная заявка #{existing.id} на рассмотрении.")
+        await require_no_active_request(CallsignRequest, user_db.discord_id)
 
     @staticmethod
     def validate_reviewer_permissions(officer: User, applicant: User | None) -> None:
@@ -168,25 +163,20 @@ class CallsignService:
         action: str,
         officer: User,
     ) -> CallsignActionResult:
-        req = await CallsignRequest.find_one(CallsignRequest.id == request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            raise ServiceError(f"❌ Заявка #{request_id} не найдена или уже обработана.")
+        req = await require_request(CallsignRequest, request_id)
 
         target_user = await User.get_by_discord_id(req.user_id)
         cls.validate_reviewer_permissions(officer, target_user)
 
         target_status, label, emoji, msg = _STATUS_ACTION[action]
-        updated_dict = await atomic_status_transition(
+
+        request = await atomic_transition(
             CallsignRequest,
             request_id,
             RequestStatus.PENDING,
             target_status,
             extra_fields={"reviewer_id": interaction.user.id, "reviewed_at": discord.utils.utcnow()},
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Заявка #{request_id} уже обработана.")
-
-        request = CallsignRequest(**updated_dict)
 
         from ui.views.indicators import indicator_view
         return CallsignActionResult(

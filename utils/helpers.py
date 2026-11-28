@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Iterable
+from typing import Iterable, TypeVar
 
 import discord
 from discord.utils import MISSING
@@ -9,8 +9,11 @@ from core import config, constants
 from core.constants import LOADING_MESSAGES, DivisionId
 from core.exceptions import ServiceError
 from database import divisions
+from database.status import RequestStatus
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 async def safe_respond(
@@ -31,6 +34,37 @@ async def safe_respond(
     except (discord.NotFound, discord.HTTPException):
         pass
 
+
+async def require_request(
+    model: type[T],
+    request_id: int,
+    statuses: str | tuple[str, ...] = RequestStatus.PENDING,
+    error_message: str | None = None,
+) -> T:
+    """Достаёт заявку в одном из допустимых статусов, иначе бросает ServiceError."""
+    allowed = statuses if isinstance(statuses, tuple) else (statuses,)
+    req = await model.find_one(model.id == request_id)
+    if not req or req.status not in allowed:
+        raise ServiceError(error_message or f"❌ Заявка #{request_id} не найдена или уже обработана.")
+    return req
+
+
+async def require_no_active_request(
+    model,
+    user_id: int,
+    statuses: tuple[str, ...] = (RequestStatus.PENDING,),
+    user_field: str = "user_id",
+    error_message: str | None = None,
+) -> None:
+    """Проверяет отсутствие активной заявки у пользователя, иначе бросает ServiceError."""
+    col = getattr(model, user_field)
+    existing = await model.find_one(col == user_id, model.status.in_(statuses))
+    if existing:
+        raise ServiceError(
+            error_message or f"❌ У вас уже есть активная заявка #{existing.id} на рассмотрении."
+        )
+
+
 def _normalize_ids(target: int | Iterable[int] | None) -> list[int]:
     """Приводит int, list, tuple или None к единому списку int."""
     if target is None:
@@ -38,6 +72,7 @@ def _normalize_ids(target: int | Iterable[int] | None) -> list[int]:
     if isinstance(target, int):
         return [target]
     return [x for x in target if x]
+
 
 def build_mentions(
         users: int | Iterable[int] = (),

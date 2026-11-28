@@ -14,8 +14,9 @@ from services.audit import AuditAction, audit_logger
 from services.member import MemberService
 from services.notifications import notify_transfer_approved, notify_transfer_rejected
 from ui.embeds.transfers import transfer_embed
-from utils.helpers import build_request_mentions, safe_publish_request, build_mentions
-from utils.atomic import atomic_status_transition
+from utils.helpers import build_request_mentions, safe_publish_request, build_mentions, require_no_active_request, \
+    require_request
+from utils.atomic import atomic_transition
 from utils.permissions import is_high_command
 
 logger = logging.getLogger(__name__)
@@ -56,13 +57,10 @@ class TransferService:
     @staticmethod
     async def validate_no_active_request(user_id: int) -> None:
         """Проверяет, что у пользователя нет открытых заявлений на перевод."""
-        opened_request = await TransferRequest.find_one(
-            TransferRequest.user_id == user_id, TransferRequest.status.not_in([RequestStatus.APPROVED, RequestStatus.REJECTED]),
+        await require_no_active_request(
+            TransferRequest, user_id,
+            statuses=(RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW),
         )
-        if opened_request is not None:
-            raise ServiceError(
-                f"### У вас уже есть открытое заявление #{opened_request.id} на рассмотрении.\nОжидайте его рассмотрения."
-            )
 
     @staticmethod
     async def validate_transfer_rules(user_db: User, destination: Division) -> None:
@@ -147,9 +145,10 @@ class TransferService:
             ServiceError: Если запрос не найден/уже обработан, офицер — автор заявления,
                 либо не имеет прав на согласование от старого подразделения.
         """
-        req = await TransferRequest.find_one(TransferRequest.id == request_id)
-        if not req or req.status != RequestStatus.OLD_DIVISION_REVIEW:
-            raise ServiceError(f"❌ Запрос #{request_id} не найден или уже обработан.")
+        req = await require_request(
+            TransferRequest, request_id, statuses=RequestStatus.OLD_DIVISION_REVIEW,
+            error_message=f"❌ Запрос #{request_id} не найден или уже обработан.",
+        )
 
         if officer.discord_id == req.user_id:
             raise ServiceError("❌ Вы не можете рассматривать собственное заявление.")
@@ -157,14 +156,12 @@ class TransferService:
         cls.validate_reviewer_permissions(officer, [req.old_division_id],
                                            "❌ У вас нет прав согласовывать перевод от старого подразделения.")
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             TransferRequest, request_id, RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW,
             extra_fields={"old_reviewer_id": interaction.user.id, "old_reviewed_at": discord.utils.utcnow()},
+            error_message=f"❌ Запрос #{request_id} уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Запрос #{request_id} уже обработан.")
 
-        request = TransferRequest(**updated_dict)
         target_user = await User.get_by_discord_id(request.user_id) or User(discord_id=request.user_id, pre_inited=True)
         new_division = divisions.get_division(request.new_division_id)
         if not new_division:
@@ -191,9 +188,10 @@ class TransferService:
             ServiceError: Если запрос не найден/уже обработан, офицер — автор заявления,
                 либо не имеет прав одобрять перевод в целевое подразделение.
         """
-        req = await TransferRequest.find_one(TransferRequest.id == request_id)
-        if not req or req.status != RequestStatus.NEW_DIVISION_REVIEW:
-            raise ServiceError(f"❌ Запрос #{request_id} не найден или уже обработан.")
+        req = await require_request(
+            TransferRequest, request_id, statuses=RequestStatus.NEW_DIVISION_REVIEW,
+            error_message=f"❌ Запрос #{request_id} не найден или уже обработан.",
+        )
 
         if officer.discord_id == req.user_id:
             raise ServiceError("❌ Вы не можете рассматривать собственное заявление.")
@@ -201,14 +199,12 @@ class TransferService:
         cls.validate_reviewer_permissions(officer, [req.new_division_id],
                                            "❌ У вас нет прав одобрять перевод в данное подразделение.")
 
-        updated_dict = await atomic_status_transition(
+        request = await atomic_transition(
             TransferRequest, request_id, RequestStatus.NEW_DIVISION_REVIEW, RequestStatus.APPROVED,
             extra_fields={"new_reviewer_id": interaction.user.id, "new_reviewed_at": discord.utils.utcnow()},
+            error_message=f"❌ Запрос #{request_id} уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Запрос #{request_id} уже обработан.")
 
-        request = TransferRequest(**updated_dict)
         destination = divisions.get_division(request.new_division_id)
 
         target_user = await User.get_by_discord_id(request.user_id) or User(discord_id=request.user_id, pre_inited=True)
@@ -241,9 +237,11 @@ class TransferService:
             ServiceError: Если запрос не найден/уже обработан, офицер — автор заявления,
                 либо не имеет прав отклонить данное заявление.
         """
-        req = await TransferRequest.find_one(TransferRequest.id == request_id)
-        if not req or req.status not in (RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW):
-            raise ServiceError(f"❌ Запрос #{request_id} не найден или уже обработан.")
+        req = await require_request(
+            TransferRequest, request_id,
+            statuses=(RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW),
+            error_message=f"❌ Запрос #{request_id} не найден или уже обработан.",
+        )
 
         if officer.discord_id == req.user_id:
             raise ServiceError("❌ Вы не можете рассматривать собственное заявление.")
@@ -260,14 +258,13 @@ class TransferService:
             update_fields["new_reviewer_id"] = interaction.user.id
             update_fields["new_reviewed_at"] = now
 
-        updated_dict = await atomic_status_transition(
-            TransferRequest, request_id, [RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW], RequestStatus.REJECTED,
+        request = await atomic_transition(
+            TransferRequest, request_id,
+            [RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW], RequestStatus.REJECTED,
             extra_fields=update_fields,
+            error_message=f"❌ Запрос #{request_id} уже обработан.",
         )
-        if not updated_dict:
-            raise ServiceError(f"❌ Запрос #{request_id} уже обработан.")
 
-        request = TransferRequest(**updated_dict)
         target_user = await User.get_by_discord_id(request.user_id) or User(discord_id=request.user_id, pre_inited=True)
         await notify_transfer_rejected(interaction.client, request.user_id, reason)
 
@@ -279,10 +276,10 @@ class TransferService:
     @staticmethod
     async def cancel_transfer(request_id: int, user_id: int) -> None:
         """Атомарно отменяет собственную заявку на перевод, пока она на первом этапе."""
-        updated_dict = await atomic_status_transition(
-            TransferRequest, request_id, [RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW], RequestStatus.REJECTED,
+        await atomic_transition(
+            TransferRequest, request_id,
+            [RequestStatus.OLD_DIVISION_REVIEW, RequestStatus.NEW_DIVISION_REVIEW], RequestStatus.REJECTED,
             extra_fields={"reject_reason": "Отменено автором"},
             extra_filter={"user_id": user_id},
+            error_message="❌ Заявку можно отменить только на этапе рассмотрения старым подразделением.",
         )
-        if not updated_dict:
-            raise ServiceError("❌ Заявку можно отменить только на этапе рассмотрения старым подразделением.")

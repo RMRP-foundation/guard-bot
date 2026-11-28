@@ -1,6 +1,11 @@
+from typing import TypeVar
+
 from sqlalchemy import update
 
+from core.exceptions import ServiceError
 from database.connection import Session
+
+T = TypeVar("T")
 
 
 async def atomic_status_transition(
@@ -25,3 +30,21 @@ async def atomic_status_transition(
     if row is None:
         return None
     return {attr.key: getattr(row, attr.key) for attr in model.__mapper__.column_attrs}
+
+async def atomic_transition(
+    model: type[T],
+    request_id: int,
+    from_status: str | list[str],
+    to_status: str,
+    extra_fields: dict | None = None,
+    extra_filter: dict | None = None,
+    error_message: str | None = None,
+) -> T:
+    """Атомарный переход статуса с возвратом модели или ServiceError при гонке."""
+    updated = await atomic_status_transition(
+        model, request_id, from_status, to_status,
+        extra_fields=extra_fields, extra_filter=extra_filter,
+    )
+    if not updated:
+        raise ServiceError(error_message or f"❌ Заявка #{request_id} уже обработана.")
+    return model(**updated)

@@ -3,11 +3,11 @@ import discord
 
 from core.exceptions import ServiceError
 from database.models import MilitaryIdRequest, User
-from database.status import RequestStatus
 from services.authorization import AuthorizationService
 from services.military_id import MilitaryIdService
 from ui.modals.military_id import MilitaryIdModal
-from utils.helpers import safe_respond, safe_edit_message, build_mentions, random_loading_message
+from ui.modals.reason import ReasonModal
+from utils.helpers import safe_respond, safe_edit_message, build_mentions, random_loading_message, require_request
 
 
 class MilitaryIdApplyView(discord.ui.LayoutView):
@@ -79,35 +79,17 @@ class MilitaryIdManagementButton(
         return cls(match.group("action"), int(match.group("id")))
 
     async def _handle_reject_modal(self, interaction: discord.Interaction, officer: User) -> None:
-        req = await MilitaryIdRequest.find_one(MilitaryIdRequest.id == self.request_id)
-        if not req or req.status != RequestStatus.PENDING:
-            await safe_respond(interaction, f"❌ Заявка #{self.request_id} не найдена или уже обработана.")
-            return
+        req = await require_request(MilitaryIdRequest, self.request_id)
+        MilitaryIdService.validate_reviewer_permissions(officer, req.user_id)
 
-        try:
-            MilitaryIdService.validate_reviewer_permissions(officer, req.user_id)
-        except ServiceError as error:
-            await safe_respond(interaction, error.message)
-            return
-
-        modal = discord.ui.Modal(title="Отклонение военного билета")
-        reason_input = discord.ui.TextInput(
-            label="Причина отклонения",
-            style=discord.TextStyle.paragraph,
-            placeholder="Укажите причину (не читаем, обрезан, не совпадает имя)",
-            required=True,
-            max_length=500,
-        )
-        modal.add_item(reason_input)
-
-        async def on_submit(modal_inter: discord.Interaction):
+        async def on_submit(modal_inter: discord.Interaction, reason: str):
             await modal_inter.response.defer()
             try:
                 result = await MilitaryIdService.reject_military_id(
                     interaction=modal_inter,
                     request_id=self.request_id,
                     officer=officer,
-                    reason=reason_input.value.strip(),
+                    reason=reason,
                 )
             except ServiceError as error:
                 await modal_inter.followup.send(error.message, ephemeral=True)
@@ -119,8 +101,9 @@ class MilitaryIdManagementButton(
                 view=result.view,
             )
 
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(
+            ReasonModal("Отклонение военного билета", on_submit, placeholder="Укажите причину (не читаем, обрезан, не совпадает имя)")
+        )
 
     async def callback(self, interaction: discord.Interaction):
         try:

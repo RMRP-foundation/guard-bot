@@ -12,7 +12,7 @@ from services.authorization import AuthorizationService
 from services.supplies import SupplyService
 from ui.embeds.supplies import supplies_embed
 from ui.modals.supplies import ItemAmountModal
-from utils.helpers import safe_respond, random_loading_message, safe_edit_message
+from utils.helpers import safe_respond, random_loading_message, safe_edit_message, require_request
 from utils.permissions import is_senior_officer
 
 logger = logging.getLogger(__name__)
@@ -215,9 +215,7 @@ class SupplyManageButton(
         try:
             officer = await AuthorizationService.require_active_soldier(interaction)
 
-            req = await SupplyRequest.find_one(SupplyRequest.id == self.request_id)
-            if not req or req.status != RequestStatus.PENDING:
-                raise ServiceError(f"❌ Заявка #{self.request_id} не найдена или уже обработана.")
+            req = await require_request(SupplyRequest, self.request_id)
 
             if self.action == "edit":
                 is_author = officer.discord_id == req.user_id
